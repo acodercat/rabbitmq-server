@@ -171,47 +171,47 @@ fi
 
 set +e
 
-# `net_kernel:start/1` will fail in `longnames` mode when erlang is
-# unable to determine FQDN of a node (with a dot in it). But `erl`
-# itself has some magic that still allow it to start when you
-# explicitly specify host (a.la `erl -name test@localhost`).
-#
-# It's not possible to communicate with this node, unless it's a
-# connection initiator. But as prelaunch IS an initiator, it doesn't
-# matter what we actually put here. But `localhost` sounds good
-# enough.
-RABBITMQ_PRELAUNCH_NODENAME="rabbitmqprelaunch${$}@localhost"
-
-# NOTIFY_SOCKET is needed here to prevent epmd from impersonating the
-# success of our startup sequence to systemd.
-NOTIFY_SOCKET= \
-RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
-ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
-RABBITMQ_CONFIG_ARG_FILE=$RABBITMQ_CONFIG_ARG_FILE \
-RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
-    ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
-    -boot "${CLEAN_BOOT_FILE}" \
-    -noinput \
-    -hidden \
-    -s rabbit_prelaunch \
-    ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
-    ${RABBITMQ_NAME_TYPE} ${RABBITMQ_PRELAUNCH_NODENAME} \
-    -conf_advanced "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
-    -rabbit feature_flags_file "\"$RABBITMQ_FEATURE_FLAGS_FILE\"" \
-    -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
-    -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
-    -extra "${RABBITMQ_NODENAME}"
-
-PRELAUNCH_RESULT=$?
-if [ ${PRELAUNCH_RESULT} = 2 ] ; then
-    # dist port is mentioned in config, so do not set it
-    true
-elif [ ${PRELAUNCH_RESULT} = 0 ] ; then
-    # dist port is not mentioned in the config file, we can set it
-    RABBITMQ_DIST_ARG="-kernel inet_dist_listen_min ${RABBITMQ_DIST_PORT} -kernel inet_dist_listen_max ${RABBITMQ_DIST_PORT}"
-else
-    exit ${PRELAUNCH_RESULT}
-fi
+# XXX # `net_kernel:start/1` will fail in `longnames` mode when erlang is
+# XXX # unable to determine FQDN of a node (with a dot in it). But `erl`
+# XXX # itself has some magic that still allow it to start when you
+# XXX # explicitly specify host (a.la `erl -name test@localhost`).
+# XXX #
+# XXX # It's not possible to communicate with this node, unless it's a
+# XXX # connection initiator. But as prelaunch IS an initiator, it doesn't
+# XXX # matter what we actually put here. But `localhost` sounds good
+# XXX # enough.
+# XXX RABBITMQ_PRELAUNCH_NODENAME="rabbitmqprelaunch${$}@localhost"
+# XXX 
+# XXX # NOTIFY_SOCKET is needed here to prevent epmd from impersonating the
+# XXX # success of our startup sequence to systemd.
+# XXX NOTIFY_SOCKET= \
+# XXX RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
+# XXX ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
+# XXX RABBITMQ_CONFIG_ARG_FILE=$RABBITMQ_CONFIG_ARG_FILE \
+# XXX RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
+# XXX     ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
+# XXX     -boot "${CLEAN_BOOT_FILE}" \
+# XXX     -noinput \
+# XXX     -hidden \
+# XXX     -s rabbit_prelaunch \
+# XXX     ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
+# XXX     ${RABBITMQ_NAME_TYPE} ${RABBITMQ_PRELAUNCH_NODENAME} \
+# XXX     -conf_advanced "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
+# XXX     -rabbit feature_flags_file "\"$RABBITMQ_FEATURE_FLAGS_FILE\"" \
+# XXX     -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
+# XXX     -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
+# XXX     -extra "${RABBITMQ_NODENAME}"
+# XXX 
+# XXX PRELAUNCH_RESULT=$?
+# XXX if [ ${PRELAUNCH_RESULT} = 2 ] ; then
+# XXX     # dist port is mentioned in config, so do not set it
+# XXX     true
+# XXX elif [ ${PRELAUNCH_RESULT} = 0 ] ; then
+# XXX     # dist port is not mentioned in the config file, we can set it
+# XXX     RABBITMQ_DIST_ARG="-kernel inet_dist_listen_min ${RABBITMQ_DIST_PORT} -kernel inet_dist_listen_max ${RABBITMQ_DIST_PORT}"
+# XXX else
+# XXX     exit ${PRELAUNCH_RESULT}
+# XXX fi
 
 # The default allocation strategy RabbitMQ is using was introduced
 # in Erlang/OTP 20.2.3. Earlier Erlang versions fail to start with
@@ -285,10 +285,12 @@ start_rabbitmq_server() {
     RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
     ERL_MAX_ETS_TABLES=$ERL_MAX_ETS_TABLES \
     ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
+    RABBITMQ_NAME_TYPE=${RABBITMQ_NAME_TYPE} \
+    RABBITMQ_NODENAME=${RABBITMQ_NODENAME} \
     exec ${ERL_DIR}erl \
         -pa "$RABBITMQ_EBIN_ROOT" "$RABBITMQ_SERVER_CODE_PATH" \
         ${RABBITMQ_START_RABBIT} \
-        ${RABBITMQ_NAME_TYPE} ${RABBITMQ_NODENAME} \
+        ${XXX_RABBITMQ_NAME_TYPE} ${XXX_RABBITMQ_NODENAME} \
         -boot "${SASL_BOOT_FILE}" \
         ${RABBITMQ_CONFIG_ARG} \
         ${RABBITMQ_GENERATED_CONFIG_ARG} \

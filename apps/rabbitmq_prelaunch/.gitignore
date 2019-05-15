@@ -1,0 +1,10 @@
+*~
+.sw?
+.*.sw?
+*.beam
+*.coverdata
+/ebin/
+rabbitmq_prelaunch.d
+
+# Dialyzer
+*.plt
