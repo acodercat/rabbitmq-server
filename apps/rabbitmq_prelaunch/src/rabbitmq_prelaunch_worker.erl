@@ -8,14 +8,30 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+-export([configure_logging/0]).
 
 -import(rabbit_misc, [pget/3]).
 
 start_link() ->
+    %init(node()),
+    %ignore.
     gen_server:start_link(?MODULE, node(), []).
 
 init(nonode@nohost) ->
+    %% Stop Mnesia now. It is started because `rabbit` depends on it
+    %% (and this `rabbitmq_prelaunch` too). But because distribution
+    %% is not configured yet at the time it is started, it is
+    %% non-functionnal. We can stop it now, setup distribution and
+    %% `rabbit` will take care of starting it again.
     mnesia:stop(),
+
+    %% 1. Logging
+    %ok = configure_logging(),
+
+    %% 2. Environment variables -> configuration
+    %% 3. Feature flags registry
+    %% 4. Checking configuration
+    %% 5. Checking+setting up distribution
 
     NameType = get_node_name_type(),
     Node = get_node_name(NameType),
@@ -32,6 +48,40 @@ init(nonode@nohost) ->
     {ok, no_state, hibernate};
 init(_) ->
     {ok, no_state, hibernate}.
+
+%% -------------------------------------------------------------------
+%% Logging
+%% -------------------------------------------------------------------
+
+configure_logging() ->
+    %% Environment variables (IN):
+    %%
+    %%   RABBITMQ_LOG_BASE
+    %%     Directory to write log files
+    %%     Default: ${SYS_PREFIX}/var/log/rabbitmq
+    %%
+    %%   RABBITMQ_LOGS
+    %%     Main log file
+    %%     Default: ${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log
+    %%
+    %%   RABBITMQ_UPDATE_LOG
+    %%     Upgrade-procesure-specific log file
+    %%     Default: ${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log
+    %%
+    %% Environment variables (OUT):
+    %%
+    %%   ERL_CRASH_DUMP
+    %%     Erlang VM crash dump file
+    %%     Default: ${RABBITMQ_LOG_BASE}/erl_crash.dump
+    %%
+    %% Application environment (OUT):
+    %%   sasl   sasl_error_logger
+    %%   sasl   errlog_type
+    %%   rabbit lager_log_root
+    %%   rabbit lager_default_file
+    %%   rabbit lager_upgrade_file
+
+    rabbit_lager:start_logger().
 
 get_node_name_type() ->
     case os:getenv("RABBITMQ_NAME_TYPE") of
