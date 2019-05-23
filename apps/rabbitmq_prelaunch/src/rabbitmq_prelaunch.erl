@@ -186,6 +186,7 @@ get_node_name(NameType) ->
 
 configure_distribution(#{nodename := Node, nodename_type := NameType}) ->
     {NodeName, NodeHost} = rabbit_nodes:parts(Node),
+    ok = rabbit_nodes_common:ensure_epmd(),
     ok = duplicate_node_check(NodeName, NodeHost),
     ok = dist_port_set_check(),
     ok = dist_port_range_check(),
