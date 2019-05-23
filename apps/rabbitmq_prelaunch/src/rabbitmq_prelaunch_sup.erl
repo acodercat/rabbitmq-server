@@ -8,9 +8,11 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
+    %% `rabbitmq_prelaunch` does not start a process, it only configures
+    %% the node.
     Prelaunch = #{id => prelaunch,
-                  start => {rabbitmq_prelaunch_worker,
-                            start_link,
+                  start => {rabbitmq_prelaunch,
+                            run,
                             []},
                   restart => transient},
     Procs = [Prelaunch],

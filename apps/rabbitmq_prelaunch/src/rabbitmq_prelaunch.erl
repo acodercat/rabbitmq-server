@@ -1,23 +1,14 @@
--module(rabbitmq_prelaunch_worker).
--behaviour(gen_server).
+-module(rabbitmq_prelaunch).
 
--export([start_link/0,
-         init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
--export([configure_logging/0]).
+-export([run/0]).
 
 -import(rabbit_misc, [pget/3]).
 
-start_link() ->
-    %init(node()),
-    %ignore.
-    gen_server:start_link(?MODULE, node(), []).
+run() ->
+    run(node()),
+    ignore.
 
-init(nonode@nohost) ->
+run(nonode@nohost) ->
     %% Stop Mnesia now. It is started because `rabbit` depends on it
     %% (and this `rabbitmq_prelaunch` too). But because distribution
     %% is not configured yet at the time it is started, it is
@@ -25,40 +16,38 @@ init(nonode@nohost) ->
     %% `rabbit` will take care of starting it again.
     mnesia:stop(),
 
+    %% Query some informations required during setup.
+    OSType = os:type(),
+    NameType = get_node_name_type(),
+    Nodename = get_node_name(NameType),
+    Context = #{os_type => OSType,
+                nodename => Nodename,
+                nodename_type => NameType},
+
     %% 1. Logging
-    %ok = configure_logging(),
+    ok = configure_logging(Context),
 
     %% 2. Environment variables -> configuration
     %% 3. Feature flags registry
     %% 4. Checking configuration
     %% 5. Checking+setting up distribution
-
-    NameType = get_node_name_type(),
-    Node = get_node_name(NameType),
-
-    {NodeName, NodeHost} = rabbit_nodes:parts(Node),
-    ok = duplicate_node_check(NodeName, NodeHost),
-    ok = dist_port_set_check(),
-    ok = dist_port_range_check(),
-    ok = dist_port_use_check(NodeHost),
-    ok = config_file_check(),
-
-    ok = configure_distribution(Node, NameType),
+    ok = configure_distribution(Context),
 
     {ok, no_state, hibernate};
-init(_) ->
+run(_) ->
     {ok, no_state, hibernate}.
 
 %% -------------------------------------------------------------------
 %% Logging
 %% -------------------------------------------------------------------
 
-configure_logging() ->
+configure_logging(Context) ->
     %% Environment variables (IN):
     %%
     %%   RABBITMQ_LOG_BASE
     %%     Directory to write log files
-    %%     Default: ${SYS_PREFIX}/var/log/rabbitmq
+    %%     Default: (Unix) ${SYS_PREFIX}/var/log/rabbitmq
+    %%           (Windows) ${RABBITMQ_BASE}\log
     %%
     %%   RABBITMQ_LOGS
     %%     Main log file
@@ -81,7 +70,89 @@ configure_logging() ->
     %%   rabbit lager_default_file
     %%   rabbit lager_upgrade_file
 
+    LogBase = get_log_base_path(Context),
+
+    case os:getenv("ERL_CRASH_DUMP") of
+        false ->
+            os:putenv("ERL_CRASH_DUMP",
+                      filename:join(LogBase, "erl_crash.dump"));
+        _ ->
+            ok
+    end,
+
+    MainLog = get_main_log_path(Context, LogBase),
+    UpgradeLog = get_upgrade_log_path(Context, LogBase),
+
+    {SaslErrorLogger,
+     MainLagerHandler,
+     UpgradeLagerHandler} = case MainLog of
+                                "-" ->
+                                    %% Log to STDOUT.
+                                    {tty,
+                                     tty,
+                                     tty};
+                                _ ->
+                                    %% Log to file.
+                                    {false,
+                                     MainLog,
+                                     UpgradeLog}
+                            end,
+
+    ok = application:set_env(sasl, errlog_type, error),
+    ok = application:set_env(sasl, sasl_error_logger, SaslErrorLogger),
+    ok = application:set_env(rabbit, lager_log_root, LogBase),
+    ok = application:set_env(rabbit, lager_default_file, MainLagerHandler),
+    ok = application:set_env(rabbit, lager_upgrade_file, UpgradeLagerHandler),
+
     rabbit_lager:start_logger().
+
+get_log_base_path(#{os_type := {unix, _}}) ->
+    SysPrefix = get_sys_prefix(),
+    get_prefixed_env_var("RABBITMQ_LOG_BASE",
+                         SysPrefix ++ "/var/log/rabbitmq");
+get_log_base_path(#{os_type := {win32, _}}) ->
+    RabbitmqBase = get_rabbitmq_base(),
+    get_prefixed_env_var("RABBITMQ_LOG_BASE",
+                         filename:join(RabbitmqBase, "log")).
+
+get_main_log_path(#{nodename := Nodename}, LogBase) ->
+    Default = filename:join(LogBase, atom_to_list(Nodename) ++ ".log"),
+    get_prefixed_env_var("RABBITMQ_LOGS", Default).
+
+get_upgrade_log_path(#{nodename := Nodename}, LogBase) ->
+    Default = filename:join(LogBase, atom_to_list(Nodename) ++ "_upgrade.log"),
+    get_env_var("RABBITMQ_UPGRADE_LOG", Default).
+
+%% -------------------------------------------------------------------
+%% Helpers.
+%% -------------------------------------------------------------------
+
+get_env_var(VarName, DefaultValue) ->
+    case os:getenv(VarName) of
+        false -> DefaultValue;
+        ""    -> DefaultValue;
+        Value -> Value
+    end.
+
+get_prefixed_env_var("RABBITMQ_" ++ Suffix = VarName, DefaultValue) ->
+    case os:getenv(VarName) of
+        false -> get_env_var(Suffix, DefaultValue);
+        ""    -> get_env_var(Suffix, DefaultValue);
+        Value -> Value
+    end.
+
+get_sys_prefix() ->
+    get_env_var("SYS_PREFIX", "").
+
+get_rabbitmq_base() ->
+    case os:getenv("RABBITMQ_BASE") of
+        false ->
+            %% FIXME: Query !APPDATA!.
+            AppData = "",
+            filename:join(AppData, "RabbitMQ");
+        Value ->
+            Value
+    end.
 
 get_node_name_type() ->
     case os:getenv("RABBITMQ_NAME_TYPE") of
@@ -109,6 +180,21 @@ get_node_name(NameType) ->
             end
     end.
 
+%% -------------------------------------------------------------------
+%% Distribution.
+%% -------------------------------------------------------------------
+
+configure_distribution(#{nodename := Node, nodename_type := NameType}) ->
+    {NodeName, NodeHost} = rabbit_nodes:parts(Node),
+    ok = duplicate_node_check(NodeName, NodeHost),
+    ok = dist_port_set_check(),
+    ok = dist_port_range_check(),
+    ok = dist_port_use_check(NodeHost),
+    ok = config_file_check(),
+
+    ok = do_configure_distribution(Node, NameType),
+    ok.
+
 get_dist_port() ->
     NodePort = case os:getenv("RABBITMQ_NODE_PORT") of
                    false  -> 5672;
@@ -121,7 +207,7 @@ get_dist_port() ->
         Value2 -> erlang:list_to_integer(Value2)
     end.
 
-configure_distribution(Node, NameType) ->
+do_configure_distribution(Node, NameType) ->
     DistPort = get_dist_port(),
     ok = application:set_env(kernel, inet_dist_listen_min, DistPort),
     ok = application:set_env(kernel, inet_dist_listen_max, DistPort),
@@ -136,10 +222,7 @@ configure_distribution(Node, NameType) ->
         _ ->
             {ok, _} = net_kernel:start([Node, NameType])
     end,
-    io:format(standard_error, "DIST: ~p, ~p~n", [node(), net_kernel:get_net_ticktime()]),
     ok.
-
-%%----------------------------------------------------------------------------
 
 config_file_check() ->
     case rabbit_config:validate_config_files() of
@@ -247,11 +330,3 @@ dist_port_use_check_fail(Port, Host) ->
                             [Port, Name, Host])
     end,
     throw(dist_port_already_in_use).
-
-handle_call(_, _, State) -> {reply, ok, State}.
-handle_cast(_, State) -> {noreply, State}.
-handle_info(_, State) -> {noreply, State}.
-
-terminate(_, _) -> ok.
-
-code_change(_, _, State) ->{ok, State}.

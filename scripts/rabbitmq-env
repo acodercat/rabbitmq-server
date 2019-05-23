@@ -238,7 +238,6 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE=${IO_THREAD_POOL_SIZE}
 [ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_ERL_ARGS}
 [ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
-[ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
 [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
 [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
 [ "x" = "x$RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS" ] && RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=${SERVER_ADDITIONAL_ERL_ARGS}
@@ -254,7 +253,6 @@ DEFAULT_NODE_PORT=5672
 
 rmq_normalize_path_var \
     RABBITMQ_CONFIG_FILE \
-    RABBITMQ_LOG_BASE \
     RABBITMQ_MNESIA_BASE \
     RABBITMQ_MNESIA_DIR \
     RABBITMQ_QUORUM_DIR
@@ -294,17 +292,6 @@ rmq_normalize_path_var RABBITMQ_ENABLED_PLUGINS_FILE
 [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
 rmq_normalize_path_var RABBITMQ_PLUGINS_DIR
 
-## Log rotation
-[ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
-[ "x" != "x$RABBITMQ_LOGS" ] && export RABBITMQ_LOGS_source=environment
-[ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
-[ "x" = "x$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log"
-[ "x" = "x$ERL_CRASH_DUMP" ] && ERL_CRASH_DUMP="${RABBITMQ_LOG_BASE}/erl_crash.dump"
-
-rmq_normalize_path_var RABBITMQ_LOGS
-
-rmq_normalize_path_var RABBITMQ_UPGRADE_LOG
-
 # Check if files and directories non-related to Mnesia are configured
 # to be in $RABBITMQ_MNESIA_DIR. If this is the case, issue a warning
 # because it will prevent auto-clustering from working (the node will be
@@ -312,14 +299,11 @@ rmq_normalize_path_var RABBITMQ_UPGRADE_LOG
 
 rmq_check_if_shared_with_mnesia \
     RABBITMQ_CONFIG_FILE \
-    RABBITMQ_LOG_BASE \
     RABBITMQ_PID_FILE \
     RABBITMQ_FEATURE_FLAGS_FILE \
     RABBITMQ_PLUGINS_EXPAND_DIR \
     RABBITMQ_ENABLED_PLUGINS_FILE \
-    RABBITMQ_PLUGINS_DIR \
-    RABBITMQ_LOGS \
-    RABBITMQ_UPGRADE_LOG
+    RABBITMQ_PLUGINS_DIR
 
 ##--- End of overridden <var_name> variables
 
