@@ -133,6 +133,9 @@ define PROJECT_ENV
 	  ]
 endef
 
+# TODO
+APPS_DIR := $(CURDIR)/apps
+
 LOCAL_DEPS = sasl rabbitmq_prelaunch mnesia os_mon inets compiler public_key crypto ssl syntax_tools
 BUILD_DEPS = rabbitmq_cli syslog
 DEPS = ranch lager rabbit_common ra sysmon_handler stdout_formatter recon observer_cli
@@ -158,11 +161,14 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 
-ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
-ERLANG_MK_COMMIT = rabbitmq-tmp
+#ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
+#ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
+
+# TODO
+unexport APPS_DIR
 
 ifeq ($(strip $(BATS)),)
 BATS := $(ERLANG_MK_TMP)/bats/bin/bats

@@ -22,18 +22,11 @@ run(nonode@nohost) ->
     %% stderr before it is ready.
 
     %% Prepare some informations required during setup.
-    OSType = os:type(),
-    NameType = rabbitmq_prelaunch_helpers:get_node_name_type(),
-    Nodename = rabbitmq_prelaunch_helpers:get_node_name(NameType),
-    ConfigBaseDir = ,
-    MnesiaBaseDir = ,
-    Context = #{os_type => OSType,
-                nodename => Nodename,
-                nodename_type => NameType},
+    Context = rabbitmq_prelaunch_env:get_context(),
+    io:format(standard_error, "CONTEXT:~n~p~n", [Context]),
 
     %% 1. Write PID file
-    PidFile = get_pid_file_path(Context),
-    ok = write_pid_file(PidFile),
+    ok = write_pid_file(Context),
 
     %% If one step fails, we remove the PID file and exit with the
     %% provided status code.
@@ -48,7 +41,7 @@ run(nonode@nohost) ->
         ok = rabbitmq_prelaunch_conf:setup(Context),
 
         %% 4. Logging
-        ok = rabbitmq_prelaunch_logging:setup(Context),
+        % FIXME ok = rabbitmq_prelaunch_logging:setup(Context),
 
         %% 5. Plugins extraction
 
@@ -65,27 +58,25 @@ run(nonode@nohost) ->
         ok = rabbitmq_prelaunch_dist:setup(Context)
     catch
         _:{exit, Reason} ->
-            remove_pid_file(PidFile),
+            remove_pid_file(Context),
             rabbitmq_prelaunch_helpers:exit(Reason)
     end;
 run(_) ->
     ok.
 
-get_pid_file_path(#{os_type := {win32, _}}) ->
-    %% Environment variables (IN):
-    %%
-    %%   RABBITMQ_PID_FILE
-    %%     PID file
-    %%     Default: (Unix) ${SYS_PREFIX}/etc/rabbitmq/rabbitmq
-    %%           (Windows) <none>
-    undefined;
-get_pid_file_path(_) ->
-    rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-      "RABBITMQ_PID_FILE",
-      rabbitmq_prelaunch_helpers:get_prefixed_env_var("RABBIT)).
-
-write_pid_file(PidFile) ->
+write_pid_file(#{pid_file := PidFile}) ->
+    Parent = filename:dirname(PidFile),
+    case rabbitmq_prelaunch_helpers:mkdir_p(Parent) of
+        ok ->
+            OSPid = os:getpid(),
+            file:write_file(PidFile, OSPid);
+        Error ->
+            Error
+    end;
+write_pid_file(_) ->
     ok.
 
-remove_pid_file(PidFile) ->
+remove_pid_file(#{pid_file := PidFile}) ->
+    file:delete(PidFile);
+remove_pid_file(_) ->
     ok.

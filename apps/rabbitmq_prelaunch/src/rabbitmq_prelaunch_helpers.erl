@@ -1,64 +1,65 @@
 -module(rabbitmq_prelaunch_helpers).
 
--export([get_env_var/2,
+-export([get_env_var/1,
+         get_env_var/2,
+         get_prefixed_env_var/1,
          get_prefixed_env_var/2,
-         get_sys_prefix/0,
-         get_rabbitmq_base/0,
-         get_node_name_type/0,
-         get_node_name/1,
+         normalize_path/1,
+         mkdir_p/1,
+         is_dev_environment/0,
          exit/1]).
 
+get_env_var(VarName) ->
+    case os:getenv(VarName) of
+        false -> false;
+        ""    -> false;
+        Value -> Value
+    end.
+
 get_env_var(VarName, DefaultValue) ->
-    case os:getenv(VarName) of
+    case get_env_var(VarName) of
         false -> DefaultValue;
-        ""    -> DefaultValue;
         Value -> Value
     end.
 
-get_prefixed_env_var("RABBITMQ_" ++ Suffix = VarName, DefaultValue) ->
-    case os:getenv(VarName) of
-        false -> get_env_var(Suffix, DefaultValue);
-        ""    -> get_env_var(Suffix, DefaultValue);
+get_prefixed_env_var("RABBITMQ_" ++ Suffix = VarName) ->
+    case get_env_var(VarName) of
+        false -> get_env_var(Suffix);
         Value -> Value
     end.
 
-get_sys_prefix() ->
-    get_env_var("SYS_PREFIX", "").
-
-get_rabbitmq_base() ->
-    case os:getenv("RABBITMQ_BASE") of
-        false ->
-            %% FIXME: Query !APPDATA!.
-            AppData = "",
-            filename:join(AppData, "RabbitMQ");
-        Value ->
-            Value
+get_prefixed_env_var(VarName, DefaultValue) ->
+    case get_prefixed_env_var(VarName) of
+        false -> DefaultValue;
+        Value -> Value
     end.
 
-get_node_name_type() ->
-    case os:getenv("RABBITMQ_NAME_TYPE") of
-        "-sname" -> shortnames;
-        "-name"  -> longnames;
-        false    -> shortnames
-    end.
+normalize_path("" = Path) ->
+    Path;
+normalize_path(Path) ->
+    filename:join(filename:split(Path)).
 
-get_node_name(NameType) ->
-    LongHostname = net_adm:localhost(),
-    ShortHostname = re:replace(LongHostname, "\\..*$", "", [{return, list}]),
-    case os:getenv("RABBITMQ_NODENAME") of
-        false when NameType =:= shortnames ->
-            rabbit_nodes:make({"rabbit", ShortHostname});
-        false when NameType =:= longnames ->
-            rabbit_nodes:make({"rabbit", LongHostname});
-        Value ->
-            case string:find(Value, "@") of
-                nomatch when NameType =:= shortnames ->
-                    rabbit_nodes:make({Value, ShortHostname});
-                nomatch when NameType =:= longnames ->
-                    rabbit_nodes:make({Value, LongHostname});
-                _ ->
-                    rabbit_nodes:make(Value)
-            end
+mkdir_p(Path) ->
+    [Root | Components] = filename:split(Path),
+    mkdir_p(Root, Components).
+
+mkdir_p(Parent, [Component | Rest]) ->
+    Dir = filename:join(Parent, Component),
+    case file:make_dir(Dir) of
+        ok              -> mkdir_p(Dir, Rest);
+        {error, eexist} -> mkdir_p(Dir, Rest);
+        Error           -> Error
+    end;
+mkdir_p(_, []) ->
+    ok.
+
+is_dev_environment() ->
+    case file:get_cwd() of
+        {ok, Cwd} ->
+            FileToCheck = filename:join(Cwd, "erlang.mk"),
+            filelib:is_regular(FileToCheck);
+        _ ->
+            false
     end.
 
 exit(Reason) when is_atom(Reason) ->
