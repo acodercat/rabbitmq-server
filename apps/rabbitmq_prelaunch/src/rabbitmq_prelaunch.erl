@@ -35,13 +35,14 @@ run(nonode@nohost) ->
         %% Here, we do the minimum to be ready for the next phase.
         %% Basically we need the main configuration to know:
         %%     - paths to log files
-        %%     - where to exract plugins
+        %%     - where to extract plugins
+
         %% 2. Verify valid config file naming
         %% 3. Cuttlefish (pass #1)
         ok = rabbitmq_prelaunch_conf:setup(Context),
 
         %% 4. Logging
-        % FIXME ok = rabbitmq_prelaunch_logging:setup(Context),
+        ok = rabbitmq_prelaunch_logging:setup(Context),
 
         %% 5. Plugins extraction
 

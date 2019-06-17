@@ -2,7 +2,7 @@ PROJECT = rabbitmq_prelaunch
 PROJECT_DESCRIPTION = RabbitMQ prelaunch procedure
 PROJECT_VERSION = 0.1.0
 
-LOCAL_DEPS = mnesia
+LOCAL_DEPS = lager mnesia
 DEPS = rabbit_common cuttlefish
 
 dep_cuttlefish = hex 2.1.4

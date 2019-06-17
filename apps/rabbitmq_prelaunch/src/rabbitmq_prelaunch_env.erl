@@ -11,6 +11,7 @@ get_context() ->
     Steps = [
              fun node_name_and_type/1,
              fun config_files/1,
+             fun log_files/1,
              fun mnesia_dir/1,
              fun pid_file/1,
              fun plugins_dirs/1
@@ -124,6 +125,58 @@ get_advanced_config_file_noex(ConfigBaseDir) ->
              filename:join(ConfigBaseDir, "advanced")),
     File1 = re:replace(File, "\\.config$", "", [{return, list}]),
     rabbitmq_prelaunch_helpers:normalize_path(File1).
+
+%% -------------------------------------------------------------------
+%%
+%% RABBITMQ_LOG_BASE
+%%   Directory to write log files
+%%   Default: (Unix) ${SYS_PREFIX}/var/log/rabbitmq
+%%         (Windows) ${RABBITMQ_BASE}\log
+%%
+%% RABBITMQ_LOGS
+%%   Main log file
+%%   Default: ${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log
+%%
+%% RABBITMQ_UPDATE_LOG
+%%   Upgrade-procesure-specific log file
+%%   Default: ${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log
+
+log_files(Context) ->
+    LogBaseDir = get_log_base_dir(Context),
+    MainLogFile = get_main_log_file(Context, LogBaseDir),
+    UpgradeLogFile = get_upgrade_log_file(Context, LogBaseDir),
+    Context#{log_base_dir => LogBaseDir,
+             main_log_file => MainLogFile,
+             upgrade_log_file => UpgradeLogFile}.
+
+get_log_base_dir(#{os_type := {unix, _}}) ->
+    SysPrefix = get_sys_prefix(),
+    Default = filename:join([SysPrefix, "etc", "rabbitmq"]),
+    rabbitmq_prelaunch_helpers:normalize_path(
+      rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+        "RABBITMQ_LOG_BASE", Default));
+get_log_base_dir(#{os_type := {win32, _}}) ->
+    RabbitmqBase = get_rabbitmq_base(),
+    Default = filename:join([RabbitmqBase, "log"]),
+    rabbitmq_prelaunch_helpers:normalize_path(
+      rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+        "RABBITMQ_LOG_BASE", Default)).
+
+get_main_log_file(#{nodename := Nodename}, LogBaseDir) ->
+    Default = filename:join(LogBaseDir, atom_to_list(Nodename) ++ ".log"),
+    Value = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+              "RABBITMQ_LOGS", Default),
+    case Value of 
+        "-" -> Value;
+        _   -> rabbitmq_prelaunch_helpers:normalize_path(Value)
+    end.
+
+get_upgrade_log_file(#{nodename := Nodename}, LogBaseDir) ->
+    Default = filename:join(LogBaseDir,
+                            atom_to_list(Nodename) ++ "_upgrade.log"),
+    rabbitmq_prelaunch_helpers:normalize_path(
+      rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+        "RABBITMQ_UPGRADE_LOG", Default)).
 
 %% -------------------------------------------------------------------
 %%
