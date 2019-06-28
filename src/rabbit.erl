@@ -306,9 +306,12 @@ boot() ->
     start_it(fun() ->
                      ensure_config(),
                      ok = ensure_application_loaded(),
-                     HipeResult = rabbit_hipe:maybe_hipe_compile(),
-                     ok = start_logger(),
-                     rabbit_hipe:log_hipe_result(HipeResult),
+                     % XXX HipeResult = rabbit_hipe:maybe_hipe_compile(),
+                     %% FIXME
+                     ok = application:set_env(lager, crash_log, false, [{persistent, true}]), % XXX
+                     ok = application:set_env(lager, handlers, [], [{persistent, true}]), % XXX
+                     % XXX ok = start_logger(),
+                     % XXX rabbit_hipe:log_hipe_result(HipeResult),
                      Apps = load_all_apps(),
                      rabbit_feature_flags:initialize_registry(),
                      rabbit_node_monitor:prepare_cluster_status_files(),

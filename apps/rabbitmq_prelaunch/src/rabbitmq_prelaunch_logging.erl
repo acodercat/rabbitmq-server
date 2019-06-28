@@ -39,5 +39,6 @@ configure_lager(#{log_base_dir := LogBaseDir,
     ok = application:set_env(rabbit, lager_log_root, LogBaseDir),
     ok = application:set_env(rabbit, lager_default_file, MainLagerHandler),
     ok = application:set_env(rabbit, lager_upgrade_file, UpgradeLagerHandler),
+    ok = application:set_env(lager, crash_log, "log/crash.log"),
 
     rabbit_lager:start_logger().
