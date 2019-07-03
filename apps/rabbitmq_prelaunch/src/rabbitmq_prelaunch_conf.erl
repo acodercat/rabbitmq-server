@@ -81,7 +81,7 @@ find_cuttlefish_schemas([Plugin | Rest], AllSchemas) ->
 find_cuttlefish_schemas([], AllSchemas) ->
     RabbitDir = code:lib_dir(rabbit),
     Schemas = list_schemas_in_app(RabbitDir),
-    Schemas ++ AllSchemas.
+    lists:sort(fun(A,B) -> A < B end, Schemas ++ AllSchemas).
 
 list_schemas_in_app(#plugin{name = PluginName,
                             version = PluginVersion,
