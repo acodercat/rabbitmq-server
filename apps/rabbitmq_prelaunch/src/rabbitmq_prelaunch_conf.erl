@@ -44,7 +44,7 @@ find_actual_advanced_config_file(#{advanced_config_file_noex := FileNoEx}) ->
 load_erlang_term_based_config_file(ConfigFile) ->
     case file:consult(ConfigFile) of
         {ok, [Config]} ->
-            do_load_erlang_term_based_config_file(Config);
+            apply_erlang_term_based_config(Config);
         {error, Reason} ->
             io:format(standard_error,
                       "Failed to load configuration file \"~s\":~n~s~n",
@@ -52,23 +52,43 @@ load_erlang_term_based_config_file(ConfigFile) ->
             rabbitmq_prelaunch_helpers:exit(ex_config)
     end.
 
-do_load_erlang_term_based_config_file([{App, Vars} | Rest]) ->
-    apply_app_env_vars(App, Vars),
-    do_load_erlang_term_based_config_file(Rest);
-do_load_erlang_term_based_config_file([]) ->
-    ok.
-
-apply_app_env_vars(App, [{Var, Value} | Rest]) ->
-    ok = application:set_env(App, Var, Value, [{persistent, true}]),
-    apply_app_env_vars(App, Rest);
-apply_app_env_vars(_, []) ->
-    ok.
-
 load_cuttlefish_config_file(Context,
-                            _MainConfigFileNoEx,
+                            MainConfigFile,
                             _AdvancedConfigFile) ->
-    Schemas = find_cuttlefish_schemas(Context),
-    io:format(standard_error, "Calling Cuttlefish with schemas:~n~p~n", [Schemas]),
+    %% Load schemas.
+    SchemaFiles = find_cuttlefish_schemas(Context),
+    case SchemaFiles of
+        [] ->
+            io:format(standard_error,
+                      "No configuration schema found~n", []),
+            rabbitmq_prelaunch_helpers:exit(ex_software);
+        _ ->
+            ok
+    end,
+    io:format(standard_error, "Calling Cuttlefish with schemas:~n~p~n",
+              [SchemaFiles]),
+    Schema = cuttlefish_schema:files(SchemaFiles),
+
+    %% Load configuration.
+    ConfigFiles = [MainConfigFile],
+    io:format(standard_error, "ConfFiles = ~p~n", [ConfigFiles]),
+    Config0 = cuttlefish_conf:files(ConfigFiles),
+
+    %% Finalize configuration, based on the schema.
+    Config = case cuttlefish_generator:map(Schema, Config0) of
+                 {error, Phase, {errorlist, Errors}} ->
+                     %% TODO
+                     io:format(
+                       standard_error,
+                       "Error generating configuration in phase ~s~n~p~n",
+                       [Phase, Errors]),
+                     %_ = [ cuttlefish_error:print(E) || E <- Errors],
+                     rabbitmq_prelaunch_helpers:exit(ex_config);
+                 ValidConfig ->
+                     proplists:delete(vm_args, ValidConfig)
+             end,
+    io:format(standard_error, "Configuration: ~p~n", [Config]),
+    apply_erlang_term_based_config(Config),
     ok.
 
 find_cuttlefish_schemas(#{plugins_path := PluginsPath}) ->
@@ -117,3 +137,15 @@ do_list_schemas_in_app(SchemaDir) ->
             %% TODO
             []
     end.
+
+apply_erlang_term_based_config([{App, Vars} | Rest]) ->
+    apply_app_env_vars(App, Vars),
+    apply_erlang_term_based_config(Rest);
+apply_erlang_term_based_config([]) ->
+    ok.
+
+apply_app_env_vars(App, [{Var, Value} | Rest]) ->
+    ok = application:set_env(App, Var, Value, [{persistent, true}]),
+    apply_app_env_vars(App, Rest);
+apply_app_env_vars(_, []) ->
+    ok.
