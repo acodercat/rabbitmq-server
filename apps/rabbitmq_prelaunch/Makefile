@@ -10,3 +10,11 @@ dep_cuttlefish = git https://github.com/rabbitmq/cuttlefish.git read-files-from-
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+
+LAGER_EXTRA_SINKS += rabbit_log_prelaunch
+
+lager_extra_sinks = $(subst $(space),$(comma),$(LAGER_EXTRA_SINKS))
+LAGER_ERLC_OPTS += +'{parse_transform,lager_transform}' \
+		   +'{lager_extra_sinks,[$(lager_extra_sinks)]}'
+
+ERLC_OPTS += $(LAGER_ERLC_OPTS)

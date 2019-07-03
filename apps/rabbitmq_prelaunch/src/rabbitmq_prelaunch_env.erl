@@ -1,6 +1,7 @@
 -module(rabbitmq_prelaunch_env).
 
--export([get_context/0]).
+-export([get_context/0,
+         log_context/1]).
 
 get_context() ->
     OSType = os:type(),
@@ -21,6 +22,15 @@ get_context() ->
       fun(Step, Context) -> Step(Context) end,
       Context0,
       Steps).
+
+log_context(Context) ->
+    rabbit_log_prelaunch:debug("Context (based on environment variables):"),
+    lists:foreach(
+      fun(Key) ->
+              Value = maps:get(Key, Context),
+              rabbit_log_prelaunch:debug("  ~s: ~p", [Key, Value])
+      end,
+      lists:sort(maps:keys(Context))).
 
 %% -------------------------------------------------------------------
 %%
@@ -140,14 +150,37 @@ get_advanced_config_file_noex(ConfigBaseDir) ->
 %% RABBITMQ_UPDATE_LOG
 %%   Upgrade-procesure-specific log file
 %%   Default: ${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log
+%%
+%% RABBITMQ_LOG_LEVEL
+%%   Log level; overrides the configuration file value
+%%   Default: (undefined)
 
 log_files(Context) ->
+    LogLevel = get_log_level(),
     LogBaseDir = get_log_base_dir(Context),
     MainLogFile = get_main_log_file(Context, LogBaseDir),
     UpgradeLogFile = get_upgrade_log_file(Context, LogBaseDir),
-    Context#{log_base_dir => LogBaseDir,
+    Context#{log_level => LogLevel,
+             log_base_dir => LogBaseDir,
              main_log_file => MainLogFile,
              upgrade_log_file => UpgradeLogFile}.
+
+get_log_level() ->
+      LLValue = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+                  "RABBITMQ_LOG_LEVEL", undefined),
+      LogLevel = case LLValue of
+                     "debug"     -> debug;
+                     "info"      -> info;
+                     "notice"    -> notice;
+                     "warning"   -> warning;
+                     "error"     -> error;
+                     "critical"  -> critical;
+                     "alert"     -> alert;
+                     "emergency" -> emergency;
+                     "none"      -> none;
+                     _           -> undefined
+                 end,
+      LogLevel.
 
 get_log_base_dir(#{os_type := {unix, _}}) ->
     SysPrefix = get_sys_prefix(),

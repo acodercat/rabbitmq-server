@@ -1,6 +1,20 @@
 -module(rabbitmq_prelaunch_logging).
 
--export([setup/1]).
+-export([enable_prelaunch_logging/1,
+         setup/1]).
+
+enable_prelaunch_logging(#{log_level := LogLevel}) ->
+    LogLevel1 = case LogLevel of
+                    undefined -> warning;
+                    _         -> LogLevel
+                end,
+    ConsoleBackend = lager_console_backend,
+    ConsoleOptions = [{level, LogLevel1}],
+    lager_app:start_handler(lager_event, ConsoleBackend, ConsoleOptions),
+    lager_app:configure_sink(
+      rabbit_log_prelaunch_lager_event,
+      [{handlers, [{ConsoleBackend, ConsoleOptions}]}]),
+    ok.
 
 setup(Context) ->
     ok = set_ERL_CRASH_DUMP_envvar(Context),

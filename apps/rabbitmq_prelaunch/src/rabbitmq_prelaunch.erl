@@ -7,11 +7,20 @@ run() ->
     ignore.
 
 run(nonode@nohost) ->
+    %% Prepare some informations required during setup.
+    Context = rabbitmq_prelaunch_env:get_context(),
+
+    %% Setup minimum logging for the prelaunch phase.
+    ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(Context),
+    rabbitmq_prelaunch_env:log_context(Context),
+
     %% Stop Mnesia now. It is started because `rabbit` depends on it
     %% (and this `rabbitmq_prelaunch` too). But because distribution
     %% is not configured yet at the time it is started, it is
     %% non-functionnal. We can stop it now, setup distribution and
     %% `rabbit` will take care of starting it again.
+    io:format(standard_error, "Lager: ~p~n~p~n", [lager:status(), application:get_all_env(lager)]),
+    rabbit_log_prelaunch:error("Stopping Mnesia to setup distribution"),
     mnesia:stop(),
 
     %% TODO: Add a small logging facility to log warnings and errors,
@@ -20,10 +29,6 @@ run(nonode@nohost) ->
     %%
     %% It could be something which wraps the final logger and writes to
     %% stderr before it is ready.
-
-    %% Prepare some informations required during setup.
-    Context = rabbitmq_prelaunch_env:get_context(),
-    io:format(standard_error, "CONTEXT:~n~p~n", [Context]),
 
     %% 1. Write PID file
     ok = write_pid_file(Context),
