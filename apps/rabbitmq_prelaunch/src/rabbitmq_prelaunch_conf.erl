@@ -7,6 +7,7 @@
 -export([setup/1]).
 
 setup(Context) ->
+    rabbit_log_prelaunch:debug("== Configuration =="),
     case find_actual_main_config_file(Context) of
         {MainConfigFile, erlang} ->
             load_erlang_term_based_config_file(MainConfigFile),
@@ -42,57 +43,79 @@ find_actual_advanced_config_file(#{advanced_config_file_noex := FileNoEx}) ->
     end.
 
 load_erlang_term_based_config_file(ConfigFile) ->
+    rabbit_log_prelaunch:debug(
+      "Loading configuration file \"~s\" (Erlang terms based)", [ConfigFile]),
     case file:consult(ConfigFile) of
         {ok, [Config]} ->
             apply_erlang_term_based_config(Config);
+        {ok, OtherTerms} ->
+            rabbit_log_prelaunch:error(
+              "Failed to load configuration file \"~s\", "
+              "incorrect format: ~p",
+              [ConfigFile, OtherTerms]),
+            rabbitmq_prelaunch_helpers:exit(ex_config);
         {error, Reason} ->
-            io:format(standard_error,
-                      "Failed to load configuration file \"~s\":~n~s~n",
-                      [ConfigFile, file:format_error(Reason)]),
+            rabbit_log_prelaunch:error(
+              "Failed to load configuration file \"~s\": ~s",
+              [ConfigFile, file:format_error(Reason)]),
             rabbitmq_prelaunch_helpers:exit(ex_config)
     end.
 
 load_cuttlefish_config_file(Context,
                             MainConfigFile,
-                            _AdvancedConfigFile) ->
+                            AdvancedConfigFile) ->
     %% Load schemas.
     SchemaFiles = find_cuttlefish_schemas(Context),
     case SchemaFiles of
         [] ->
-            io:format(standard_error,
-                      "No configuration schema found~n", []),
+            rabbit_log_prelaunch:error(
+              "No configuration schema found~n", []),
             rabbitmq_prelaunch_helpers:exit(ex_software);
         _ ->
+            rabbit_log_prelaunch:debug(
+              "Configuration schemas found:~n", []),
+            [rabbit_log_prelaunch:debug("  - ~s", [SchemaFile])
+             || SchemaFile <- SchemaFiles],
             ok
     end,
-    io:format(standard_error, "Calling Cuttlefish with schemas:~n~p~n",
-              [SchemaFiles]),
     Schema = cuttlefish_schema:files(SchemaFiles),
 
     %% Load configuration.
+    rabbit_log_prelaunch:debug(
+      "Loading configuration file \"~s\" (Cuttlefish based)",
+      [MainConfigFile]),
     ConfigFiles = [MainConfigFile],
-    io:format(standard_error, "ConfFiles = ~p~n", [ConfigFiles]),
     Config0 = cuttlefish_conf:files(ConfigFiles),
 
     %% Finalize configuration, based on the schema.
     Config = case cuttlefish_generator:map(Schema, Config0) of
                  {error, Phase, {errorlist, Errors}} ->
                      %% TODO
-                     io:format(
-                       standard_error,
-                       "Error generating configuration in phase ~s~n~p~n",
+                     rabbit_log_prelaunch:error(
+                       "Error generating configuration in phase ~s:",
                        [Phase, Errors]),
-                     %_ = [ cuttlefish_error:print(E) || E <- Errors],
+                     [rabbit_log_prelaunch:error(
+                        "  - ~s",
+                        [cuttlefish_error:xlate(Error)])
+                      || Error <- Errors],
                      rabbitmq_prelaunch_helpers:exit(ex_config);
                  ValidConfig ->
                      proplists:delete(vm_args, ValidConfig)
              end,
-    io:format(standard_error, "Configuration: ~p~n", [Config]),
-    apply_erlang_term_based_config(Config),
+
+    %% Apply advanced configuration overrides, if any.
+    Config1 = override_with_advanced_config(Config, AdvancedConfigFile),
+
+    apply_erlang_term_based_config(Config1),
     ok.
 
 find_cuttlefish_schemas(#{plugins_path := PluginsPath}) ->
     Plugins = rabbit_plugins:list(PluginsPath),
+    rabbit_log_prelaunch:debug(
+      "Looking up configuration schemas in RabbitMQ core and "
+      "the following plugins:"),
+    [rabbit_log_prelaunch:debug("  - ~s", [Plugin#plugin.name])
+     || Plugin <- Plugins],
     find_cuttlefish_schemas(Plugins, []).
 
 find_cuttlefish_schemas([Plugin | Rest], AllSchemas) ->
@@ -138,7 +161,31 @@ do_list_schemas_in_app(SchemaDir) ->
             []
     end.
 
+override_with_advanced_config(Config, undefined) ->
+    Config;
+override_with_advanced_config(Config, AdvancedConfigFile) ->
+    rabbit_log_prelaunch:debug(
+      "Override with advanced configuration file \"~s\"", [AdvancedConfigFile]),
+    case file:consult(AdvancedConfigFile) of
+        {ok, [AdvancedConfig]} ->
+            cuttlefish_advanced:overlay(Config, AdvancedConfig);
+        {ok, OtherTerms} ->
+            rabbit_log_prelaunch:error(
+              "Failed to load advanced configuration file \"~s\", "
+              "incorrect format: ~p",
+              [AdvancedConfigFile, OtherTerms]),
+            rabbitmq_prelaunch_helpers:exit(ex_config);
+        {error, Reason} ->
+            rabbit_log_prelaunch:error(
+              "Failed to load advanced configuration file \"~s\": ~s",
+              [AdvancedConfigFile, file:format_error(Reason)]),
+            rabbitmq_prelaunch_helpers:exit(ex_config)
+    end.
+
 apply_erlang_term_based_config([{App, Vars} | Rest]) ->
+    rabbit_log_prelaunch:debug(
+      "Applying configuration for '~s': ~p",
+      [App, Vars]),
     apply_app_env_vars(App, Vars),
     apply_erlang_term_based_config(Rest);
 apply_erlang_term_based_config([]) ->

@@ -23,6 +23,7 @@ enable_prelaunch_logging(#{log_levels := LogLevels}) ->
     ok.
 
 setup(Context) ->
+    rabbit_log_prelaunch:debug("== Logging =="),
     ok = set_ERL_CRASH_DUMP_envvar(Context),
     ok = configure_lager(Context).
 
