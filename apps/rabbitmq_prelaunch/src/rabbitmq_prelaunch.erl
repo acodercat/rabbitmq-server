@@ -19,16 +19,10 @@ run(nonode@nohost) ->
     %% is not configured yet at the time it is started, it is
     %% non-functionnal. We can stop it now, setup distribution and
     %% `rabbit` will take care of starting it again.
-    io:format(standard_error, "Lager: ~p~n~p~n", [lager:status(), application:get_all_env(lager)]),
-    rabbit_log_prelaunch:error("Stopping Mnesia to setup distribution"),
-    mnesia:stop(),
-
-    %% TODO: Add a small logging facility to log warnings and errors,
-    %% and help debug this application before the actual logger is
-    %% ready.
     %%
-    %% It could be something which wraps the final logger and writes to
-    %% stderr before it is ready.
+    %% TODO: Move to distribution setup.
+    rabbit_log_prelaunch:debug("Stopping Mnesia to setup distribution"),
+    mnesia:stop(),
 
     %% 1. Write PID file
     ok = write_pid_file(Context),

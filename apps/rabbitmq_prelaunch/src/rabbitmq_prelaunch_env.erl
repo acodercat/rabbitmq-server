@@ -151,36 +151,67 @@ get_advanced_config_file_noex(ConfigBaseDir) ->
 %%   Upgrade-procesure-specific log file
 %%   Default: ${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log
 %%
-%% RABBITMQ_LOG_LEVEL
+%% RABBITMQ_LOG
 %%   Log level; overrides the configuration file value
 %%   Default: (undefined)
 
 log_files(Context) ->
-    LogLevel = get_log_level(),
+    LogLevels = get_log_levels(),
     LogBaseDir = get_log_base_dir(Context),
     MainLogFile = get_main_log_file(Context, LogBaseDir),
     UpgradeLogFile = get_upgrade_log_file(Context, LogBaseDir),
-    Context#{log_level => LogLevel,
+    Context#{log_levels => LogLevels,
              log_base_dir => LogBaseDir,
              main_log_file => MainLogFile,
              upgrade_log_file => UpgradeLogFile}.
 
-get_log_level() ->
-      LLValue = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-                  "RABBITMQ_LOG_LEVEL", undefined),
-      LogLevel = case LLValue of
-                     "debug"     -> debug;
-                     "info"      -> info;
-                     "notice"    -> notice;
-                     "warning"   -> warning;
-                     "error"     -> error;
-                     "critical"  -> critical;
-                     "alert"     -> alert;
-                     "emergency" -> emergency;
-                     "none"      -> none;
-                     _           -> undefined
-                 end,
-      LogLevel.
+get_log_levels() ->
+      LogValue = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+                   "RABBITMQ_LOG"),
+      case LogValue of
+          false -> undefined;
+          _     -> get_log_levels1(string:lexemes(LogValue, ","), #{})
+      end.
+
+get_log_levels1([CategoryValue | Rest], Result) ->
+    case string:lexemes(CategoryValue, "=") of
+        ["+color"] ->
+            Result1 = Result#{color => true},
+            get_log_levels1(Rest, Result1);
+        ["-color"] ->
+            Result1 = Result#{color => false},
+            get_log_levels1(Rest, Result1);
+        [CategoryOrLevel] ->
+            case parse_level(CategoryOrLevel) of
+                undefined ->
+                    Result1 = Result#{CategoryOrLevel => debug},
+                    get_log_levels1(Rest, Result1);
+                Level ->
+                    Result1 = Result#{global => Level},
+                    get_log_levels1(Rest, Result1)
+            end;
+        [Category, Level0] ->
+            case parse_level(Level0) of
+                undefined ->
+                    get_log_levels1(Rest, Result);
+                Level ->
+                    Result1 = Result#{Category => Level},
+                    get_log_levels1(Rest, Result1)
+            end
+    end;
+get_log_levels1([], Result) ->
+    Result.
+
+parse_level("debug")     -> debug;
+parse_level("info")      -> info;
+parse_level("notice")    -> notice;
+parse_level("warning")   -> warning;
+parse_level("error")     -> error;
+parse_level("critical")  -> critical;
+parse_level("alert")     -> alert;
+parse_level("emergency") -> emergency;
+parse_level("none")      -> none;
+parse_level(_)           -> undefined.
 
 get_log_base_dir(#{os_type := {unix, _}}) ->
     SysPrefix = get_sys_prefix(),
