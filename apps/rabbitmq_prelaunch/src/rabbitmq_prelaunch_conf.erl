@@ -7,7 +7,12 @@
 -export([setup/1]).
 
 setup(Context) ->
+    rabbit_log_prelaunch:debug(""),
     rabbit_log_prelaunch:debug("== Configuration =="),
+
+    %% TODO: Should we call rabbit_config:validate_config_files/0 and
+    %% adapt it to accept configuration file names as arguments?
+
     case find_actual_main_config_file(Context) of
         {MainConfigFile, erlang} ->
             load_erlang_term_based_config_file(MainConfigFile),

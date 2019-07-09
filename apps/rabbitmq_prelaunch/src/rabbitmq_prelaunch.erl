@@ -7,22 +7,16 @@ run() ->
     ignore.
 
 run(nonode@nohost) ->
-    %% Prepare some informations required during setup.
-    Context = rabbitmq_prelaunch_env:get_context(),
+    %% Prepare minimal informations to setup logging.
+    EarlyContext = rabbitmq_prelaunch_env:get_early_context(),
 
     %% Setup minimum logging for the prelaunch phase.
-    ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(Context),
-    rabbitmq_prelaunch_env:log_context(Context),
+    ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(
+           EarlyContext, true),
 
-    %% Stop Mnesia now. It is started because `rabbit` depends on it
-    %% (and this `rabbitmq_prelaunch` too). But because distribution
-    %% is not configured yet at the time it is started, it is
-    %% non-functionnal. We can stop it now, setup distribution and
-    %% `rabbit` will take care of starting it again.
-    %%
-    %% TODO: Move to distribution setup.
-    rabbit_log_prelaunch:debug("Stopping Mnesia to setup distribution"),
-    mnesia:stop(),
+    %% Prepare more informations required during setup.
+    Context = rabbitmq_prelaunch_env:get_context(EarlyContext),
+    rabbitmq_prelaunch_env:log_context(Context),
 
     %% 1. Write PID file
     write_pid_file(Context),
@@ -30,12 +24,6 @@ run(nonode@nohost) ->
     %% If one step fails, we remove the PID file and exit with the
     %% provided status code.
     try
-        %% ---------------------- Phase 1 ----------------------
-        %% Here, we do the minimum to be ready for the next phase.
-        %% Basically we need the main configuration to know:
-        %%     - paths to log files
-        %%     - where to extract plugins
-
         %% 2. Verify valid config file naming
         %% 3. Cuttlefish (pass #1)
         ok = rabbitmq_prelaunch_conf:setup(Context),
@@ -43,18 +31,11 @@ run(nonode@nohost) ->
         %% 4. Logging
         ok = rabbitmq_prelaunch_logging:setup(Context),
 
-        %% 5. Plugins extraction
+        %% 5. Feature flags registry (including plugins)
 
-        %% ---------------------- Phase 2 ----------------------
-        %% Now, plugins are extracted, we can revisit the configuration
-        %% because we have access to plugins' schemas.
-
-        %% 6. Cuttlefish (pass #2, with plugin schemas)
-        %% 7. Feature flags registry (including plugins)
-
-        %% 8. Remaining environment variables -> configuration
-        %% 9. Checking configuration
-        %% 10. Checking+setting up distribution
+        %% 6. Remaining environment variables -> configuration
+        %% 7. Checking configuration
+        %% 8. Checking+setting up distribution
         ok = rabbitmq_prelaunch_dist:setup(Context)
     catch
         _:{exit, Reason} ->

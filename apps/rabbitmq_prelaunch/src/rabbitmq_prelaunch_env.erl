@@ -1,26 +1,41 @@
 -module(rabbitmq_prelaunch_env).
 
--export([get_context/0,
+-export([get_early_context/0,
+         get_context/1,
          log_context/1]).
 
-get_context() ->
-    OSType = os:type(),
-    Context0 = #{os_type => OSType},
-
+get_early_context() ->
     %% The order of steps below is important because some of them
     %% depends on previous steps.
     Steps = [
              fun node_name_and_type/1,
+             fun log_levels/1
+            ],
+
+    run_context_steps(context_base(), Steps).
+
+get_context(EarlyContext) ->
+    %% The order of steps below is important because some of them
+    %% depends on previous steps.
+    Steps = [
              fun config_files/1,
              fun log_files/1,
              fun mnesia_dir/1,
              fun pid_file/1,
-             fun plugins_dirs/1
+             fun plugins_dirs/1,
+             fun tcp_ports/1
             ],
 
+    run_context_steps(EarlyContext, Steps).
+
+context_base() ->
+    OSType = os:type(),
+    #{os_type => OSType}.
+
+run_context_steps(Context, Steps) ->
     lists:foldl(
-      fun(Step, Context) -> Step(Context) end,
-      Context0,
+      fun(Step, Context1) -> Step(Context1) end,
+      Context,
       Steps).
 
 log_context(Context) ->
@@ -49,6 +64,7 @@ node_name_and_type(Context) ->
     NameType = get_node_name_type(),
     Nodename = get_node_name(NameType),
     Context#{nodename => Nodename,
+             split_nodename => rabbit_nodes:parts(Nodename),
              nodename_type => NameType}.
 
 get_node_name_type() ->
@@ -155,13 +171,15 @@ get_advanced_config_file_noex(ConfigBaseDir) ->
 %%   Log level; overrides the configuration file value
 %%   Default: (undefined)
 
-log_files(Context) ->
+log_levels(Context) ->
     LogLevels = get_log_levels(),
+    Context#{log_levels => LogLevels}.
+
+log_files(Context) ->
     LogBaseDir = get_log_base_dir(Context),
     MainLogFile = get_main_log_file(Context, LogBaseDir),
     UpgradeLogFile = get_upgrade_log_file(Context, LogBaseDir),
-    Context#{log_levels => LogLevels,
-             log_base_dir => LogBaseDir,
+    Context#{log_base_dir => LogBaseDir,
              main_log_file => MainLogFile,
              upgrade_log_file => UpgradeLogFile}.
 
@@ -347,6 +365,60 @@ get_enabled_plugins_file(Context) ->
     rabbitmq_prelaunch_helpers:get_prefixed_env_var(
       "RABBITMQ_ENABLED_PLUGINS_FILE",
       Default).
+
+%% -------------------------------------------------------------------
+%%
+%% RABBITMQ_NODE_PORT
+%%   AMQP TCP port.
+%%   Default: 5672
+%%
+%% RABBITMQ_DIST_PORT
+%%   Erlang distribution TCP port.
+%%   Default: ${RABBITMQ_NODE_PORT} + 20000
+
+tcp_ports(Context) ->
+    AmqpTcpPort = get_amqp_tcp_port(),
+    DistTcpPort = get_erlang_dist_tcp_port(AmqpTcpPort),
+    Context#{tcp_ports => #{amqp => AmqpTcpPort,
+                            erlang_dist => DistTcpPort}}.
+
+get_amqp_tcp_port() ->
+    Default = 5672,
+    TcpPortStr = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+      "RABBITMQ_NODE_PORT"),
+    case TcpPortStr of
+        false ->
+            Default;
+        _ ->
+            try
+                erlang:list_to_integer(TcpPortStr)
+            catch
+                _:badarg ->
+                    rabbit_log_prelaunch:error(
+                      "Invalid value for $RABBITMQ_NODE_PORT: ~p",
+                      [TcpPortStr]),
+                    rabbitmq_prelaunch_helpers:exit(ex_config)
+            end
+    end.
+
+get_erlang_dist_tcp_port(AmqpTcpPort) ->
+    Default = AmqpTcpPort + 20000,
+    TcpPortStr = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+      "RABBITMQ_DIST_PORT"),
+    case TcpPortStr of
+        false ->
+            Default;
+        _ ->
+            try
+                erlang:list_to_integer(TcpPortStr)
+            catch
+                _:badarg ->
+                    rabbit_log_prelaunch:error(
+                      "Invalid value for $RABBITMQ_DIST_PORT: ~p",
+                      [TcpPortStr]),
+                    rabbitmq_prelaunch_helpers:exit(ex_config)
+            end
+    end.
 
 %% -------------------------------------------------------------------
 %%
