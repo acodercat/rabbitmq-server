@@ -25,7 +25,7 @@ run(nonode@nohost) ->
     mnesia:stop(),
 
     %% 1. Write PID file
-    ok = write_pid_file(Context),
+    write_pid_file(Context),
 
     %% If one step fails, we remove the PID file and exit with the
     %% provided status code.
@@ -65,12 +65,24 @@ run(_) ->
     ok.
 
 write_pid_file(#{pid_file := PidFile}) ->
+    rabbit_log_prelaunch:debug("Writing PID file: ~s", [PidFile]),
     Parent = filename:dirname(PidFile),
     case rabbitmq_prelaunch_helpers:mkdir_p(Parent) of
         ok ->
             OSPid = os:getpid(),
-            file:write_file(PidFile, OSPid);
-        Error ->
+            case file:write_file(PidFile, OSPid) of
+                ok ->
+                    ok;
+                {error, Reason} = Error ->
+                    rabbit_log_prelaunch:error(
+                      "Failed to write PID file \"~s\": ~s",
+                      [PidFile, file:format_error(Reason)]),
+                    Error
+            end;
+        {error, Reason} = Error ->
+            rabbit_log_prelaunch:error(
+              "Failed to create PID file \"~s\" directory: ~s",
+              [PidFile, file:format_error(Reason)]),
             Error
     end;
 write_pid_file(_) ->

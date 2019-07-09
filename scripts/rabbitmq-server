@@ -25,39 +25,6 @@ RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
 [ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s $RABBITMQ_BOOT_MODULE boot "
 
-case "$(uname -s)" in
-  CYGWIN*) # we make no attempt to record the cygwin pid; rabbitmqctl wait
-           # will not be able to make sense of it anyway
-           ;;
-  *)       # When -detached is passed, we don't write the pid, since it'd be the
-           # wrong one
-           detached=""
-           for opt in "$@"; do
-               if [ "$opt" = "-detached" ]; then
-                   detached="true"
-               fi
-           done
-           if [ $detached ]; then
-               echo "Warning: PID file not written; -detached was passed." 1>&2
-           else
-               RABBITMQ_PID_DIR="$(dirname ${RABBITMQ_PID_FILE})"
-               EX_CANTCREAT=73 # Standard exit code from sysexits(2)
-               if ! mkdir -p "$RABBITMQ_PID_DIR"; then
-                   # Better diagnostics - 'mkdir -p' reports only the first directory in chain that
-                   # it fails to create
-                   echo "Failed to create directory: $RABBITMQ_PID_DIR"
-                   exit $EX_CANTCREAT
-               fi
-               if ! echo $$ > ${RABBITMQ_PID_FILE}; then
-                   # Better diagnostics - otherwise the only report in logs is about failed 'echo'
-                   # command, but without any other details: neither what script has failed nor what
-                   # file output was redirected to.
-                   echo "Failed to write pid file: ${RABBITMQ_PID_FILE}"
-                   exit $EX_CANTCREAT
-               fi
-           fi
-esac
-
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 
 [ "$NOTIFY_SOCKET" ] && RUNNING_UNDER_SYSTEMD=true
