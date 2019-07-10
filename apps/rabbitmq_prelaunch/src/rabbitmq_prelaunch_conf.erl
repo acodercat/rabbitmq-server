@@ -13,6 +13,10 @@ setup(Context) ->
     %% TODO: Should we call rabbit_config:validate_config_files/0 and
     %% adapt it to accept configuration file names as arguments?
 
+    %% TODO: Check if directories/files are inside Mnesia dir.
+
+    set_default_app_env_vars(Context),
+
     case find_actual_main_config_file(Context) of
         {MainConfigFile, erlang} ->
             load_erlang_term_based_config_file(MainConfigFile),
@@ -26,6 +30,45 @@ setup(Context) ->
         undefined ->
             ok
     end.
+
+set_default_app_env_vars(
+  #{mnesia_dir := MnesiaDir,
+    quorum_queue_dir := QuorumQueueDir,
+    plugins_path := PluginsPath,
+    plugins_expand_dir := PluginsExpandDir,
+    enabled_plugins_file := EnabledPluginsFile} = Context) ->
+    rabbit_log_prelaunch:debug(
+      "Setting default application environment variables:"),
+    Fun = fun({App, Param, Value}) ->
+                  rabbit_log_prelaunch:debug(
+                    "  - ~s:~s = ~p", [App, Param, Value]),
+                  ok = application:set_env(
+                         App, Param, Value, [{persistent, true}])
+          end,
+
+    lists:foreach(
+      Fun,
+      %% Those are all the application environment variables which
+      %% were historically set on the erl(1) command line in
+      %% rabbitmq-server(8).
+      [{kernel, inet_default_connect_options, [{nodelay, true}]},
+       {os_mon, start_cpu_sup, false},
+       {os_mon, start_disksup, false},
+       {os_mon, start_memsup, false},
+       {mnesia, dir, MnesiaDir},
+       {ra, data_dir, QuorumQueueDir},
+       {rabbit, plugins_dir, PluginsPath},
+       {rabbit, plugins_expand_dir, PluginsExpandDir},
+       {rabbit, enabled_plugins_file, EnabledPluginsFile}]),
+
+    case Context of
+        #{amqp_ipaddr_and_tcp_port := {IpAddr, TcpPort}}
+          when IpAddr /= undefined andalso TcpPort /= undefined ->
+            Fun({rabbit, tcp_listeners, [{IpAddr, TcpPort}]});
+        _ ->
+            ok
+    end,
+    ok.
 
 find_actual_main_config_file(#{main_config_file_noex := FileNoEx}) ->
     File1 = FileNoEx ++ ".conf",

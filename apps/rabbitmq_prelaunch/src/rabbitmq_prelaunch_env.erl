@@ -21,10 +21,11 @@ get_context(EarlyContext) ->
              fun config_files/1,
              fun log_files/1,
              fun mnesia_dir/1,
+             fun quorum_dir/1,
              fun pid_file/1,
              fun feature_flags_file/1,
              fun plugins_dirs/1,
-             fun tcp_ports/1
+             fun tcp_configuration/1
             ],
 
     run_context_steps(EarlyContext, Steps).
@@ -299,6 +300,22 @@ get_mnesia_dir(#{nodename := Nodename}, MnesiaBaseDir) ->
 
 %% -------------------------------------------------------------------
 %%
+%% RABBITMQ_QUORUM_DIR
+%%   Directory where to store Ra state for quorum queues.
+%%   Default: ${RABBITMQ_MNESIA_DIR}/quorum
+
+quorum_dir(Context) ->
+    QuorumQueueDir = get_quorum_queue_dir(Context),
+    Context#{quorum_queue_dir => QuorumQueueDir}.
+
+get_quorum_queue_dir(#{mnesia_dir := MnesiaDir}) ->
+    Default = filename:join(MnesiaDir, "quorum"),
+    Dir = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+            "RABBITMQ_QUORUM_DIR", Default),
+    rabbitmq_prelaunch_helpers:normalize_path(Dir).
+
+%% -------------------------------------------------------------------
+%%
 %% RABBITMQ_PID_FILE [Unix only]
 %%   File used to write the Erlang VM OS PID.
 %%   Default: ${RABBITMQ_MNESIA_DIR}.pid
@@ -387,6 +404,10 @@ get_enabled_plugins_file(Context) ->
 
 %% -------------------------------------------------------------------
 %%
+%% RABBITMQ_NODE_IP_ADDRESS
+%%   AMQP TCP IP address to listen on
+%%   Default: unset (i.e. listen on all interfaces)
+%%
 %% RABBITMQ_NODE_PORT
 %%   AMQP TCP port.
 %%   Default: 5672
@@ -395,11 +416,16 @@ get_enabled_plugins_file(Context) ->
 %%   Erlang distribution TCP port.
 %%   Default: ${RABBITMQ_NODE_PORT} + 20000
 
-tcp_ports(Context) ->
+tcp_configuration(Context) ->
+    AmqpIpAddress = get_amqp_ipaddr(),
     AmqpTcpPort = get_amqp_tcp_port(),
     DistTcpPort = get_erlang_dist_tcp_port(AmqpTcpPort),
-    Context#{tcp_ports => #{amqp => AmqpTcpPort,
-                            erlang_dist => DistTcpPort}}.
+    Context#{amqp_ipaddr_and_tcp_port => {AmqpIpAddress, AmqpTcpPort},
+             erlang_dist_tcp_port => DistTcpPort}.
+
+get_amqp_ipaddr() ->
+    rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+      "RABBITMQ_NODE_IP_ADDRESS", "auto").
 
 get_amqp_tcp_port() ->
     Default = 5672,

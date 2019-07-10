@@ -28,7 +28,7 @@ stop_mnesia() ->
 
 do_setup(#{nodename := Node,
            nodename_type := NameType,
-           tcp_ports := #{erlang_dist := DistTcpPort}}) ->
+           erlang_dist_tcp_port := DistTcpPort}) ->
     ok = application:set_env(kernel, inet_dist_listen_min, DistTcpPort),
     ok = application:set_env(kernel, inet_dist_listen_max, DistTcpPort),
 
@@ -69,7 +69,7 @@ duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
             rabbitmq_prelaunch_helpers:exit(ex_config)
     end.
 
-dist_port_range_check(#{tcp_ports := #{erlang_dist := DistTcpPort}}) ->
+dist_port_range_check(#{erlang_dist_tcp_port := DistTcpPort}) ->
     case DistTcpPort of
         _ when DistTcpPort < 1 orelse DistTcpPort > 65535 ->
             rabbit_log_prelaunch:error(
@@ -80,7 +80,7 @@ dist_port_range_check(#{tcp_ports := #{erlang_dist := DistTcpPort}}) ->
     end.
 
 dist_port_use_check(#{split_nodename := {_, NodeHost},
-                     tcp_ports := #{erlang_dist := DistTcpPort}}) ->
+                      erlang_dist_tcp_port := DistTcpPort}) ->
     dist_port_use_check_ipv4(NodeHost, DistTcpPort).
 
 dist_port_use_check_ipv4(NodeHost, Port) ->
