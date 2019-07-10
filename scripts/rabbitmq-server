@@ -227,7 +227,6 @@ start_rabbitmq_server() {
         -kernel inet_default_connect_options "[{nodelay,true}]" \
         ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
         ${RABBITMQ_LISTEN_ARG} \
-        -rabbit feature_flags_file "\"$RABBITMQ_FEATURE_FLAGS_FILE\"" \
         -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
         -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
         -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \

@@ -304,7 +304,7 @@ start() ->
 
 boot() ->
     start_it(fun() ->
-                     ensure_config(),
+                     % XXX ensure_config(),
                      ok = ensure_application_loaded(),
                      % XXX HipeResult = rabbit_hipe:maybe_hipe_compile(),
                      %% FIXME
@@ -313,27 +313,27 @@ boot() ->
                      % XXX ok = start_logger(),
                      % XXX rabbit_hipe:log_hipe_result(HipeResult),
                      Apps = load_all_apps(),
-                     rabbit_feature_flags:initialize_registry(),
-                     rabbit_node_monitor:prepare_cluster_status_files(),
-                     ok = rabbit_upgrade:maybe_upgrade_mnesia(),
+                     % XXX rabbit_feature_flags:initialize_registry(),
+                     % XXX rabbit_node_monitor:prepare_cluster_status_files(),
+                     % XXX ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
                      %% the upgrade, since if we are a secondary node the
                      %% primary node will have forgotten us
-                     rabbit_mnesia:check_cluster_consistency(),
+                     % XXX rabbit_mnesia:check_cluster_consistency(),
                      broker_start(Apps)
              end).
 
-ensure_config() ->
-    case rabbit_config:validate_config_files() of
-        ok -> ok;
-        {error, {ErrFmt, ErrArgs}} ->
-            throw({error, {check_config_file, ErrFmt, ErrArgs}})
-    end,
-    case rabbit_config:prepare_and_use_config() of
-        {error, {generation_error, Error}} ->
-            throw({error, {generate_config_file, Error}});
-        ok -> ok
-    end.
+% XXX ensure_config() ->
+% XXX     case rabbit_config:validate_config_files() of
+% XXX         ok -> ok;
+% XXX         {error, {ErrFmt, ErrArgs}} ->
+% XXX             throw({error, {check_config_file, ErrFmt, ErrArgs}})
+% XXX     end,
+% XXX     case rabbit_config:prepare_and_use_config() of
+% XXX         {error, {generation_error, Error}} ->
+% XXX             throw({error, {generate_config_file, Error}});
+% XXX         ok -> ok
+% XXX     end.
 
 load_all_apps() ->
     Plugins = rabbit_plugins:setup(),

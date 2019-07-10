@@ -24,23 +24,38 @@ run(nonode@nohost) ->
     %% If one step fails, we remove the PID file and exit with the
     %% provided status code.
     try
-        %% 2. Verify valid config file naming
-        %% 3. Cuttlefish (pass #1)
+        %% 2. Feature flags registry
+        ok = rabbitmq_prelaunch_feature_flags:setup(Context),
+
+        %% 3. Configuration check + loading
         ok = rabbitmq_prelaunch_conf:setup(Context),
 
         %% 4. Logging
         ok = rabbitmq_prelaunch_logging:setup(Context),
 
-        %% 5. Feature flags registry (including plugins)
+        %% 5. HiPE compilation
+        ok = rabbitmq_prelaunch_hipe:setup(Context),
 
-        %% 6. Remaining environment variables -> configuration
-        %% 7. Checking configuration
-        %% 8. Checking+setting up distribution
-        ok = rabbitmq_prelaunch_dist:setup(Context)
+        %% 6. Erlang distribution check + start
+        ok = rabbitmq_prelaunch_dist:setup(Context),
+
+        %% 7. Clustering
+        ok = rabbitmq_prelaunch_cluster:setup(Context)
     catch
         _:{exit, Reason} ->
             remove_pid_file(Context),
-            rabbitmq_prelaunch_helpers:exit(Reason)
+            rabbitmq_prelaunch_helpers:exit(Reason);
+        Class:Reason:Stacktrace ->
+            rabbit_log_prelaunch:error(
+              "Exception during prelaunch phase:"),
+            [rabbit_log_prelaunch:error("~s", [Line])
+             || Line <- string:split(
+                          lager:pr_stacktrace(Stacktrace, {Class, Reason}),
+                          [$\n],
+                          all)],
+
+            remove_pid_file(Context),
+            rabbitmq_prelaunch_helpers:exit(ex_software)
     end;
 run(_) ->
     ok.

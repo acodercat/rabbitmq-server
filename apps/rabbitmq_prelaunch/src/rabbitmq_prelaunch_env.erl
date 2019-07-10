@@ -22,6 +22,7 @@ get_context(EarlyContext) ->
              fun log_files/1,
              fun mnesia_dir/1,
              fun pid_file/1,
+             fun feature_flags_file/1,
              fun plugins_dirs/1,
              fun tcp_ports/1
             ],
@@ -248,7 +249,7 @@ get_main_log_file(#{nodename := Nodename}, LogBaseDir) ->
     Default = filename:join(LogBaseDir, atom_to_list(Nodename) ++ ".log"),
     Value = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
               "RABBITMQ_LOGS", Default),
-    case Value of 
+    case Value of
         "-" -> Value;
         _   -> rabbitmq_prelaunch_helpers:normalize_path(Value)
     end.
@@ -313,6 +314,24 @@ get_pid_file_path(#{mnesia_base_dir := MnesiaBaseDir,
     File = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
       "RABBITMQ_PID_FILE",
       filename:join(MnesiaBaseDir, atom_to_list(Nodename) ++ ".pid")),
+    rabbitmq_prelaunch_helpers:normalize_path(File).
+
+%% -------------------------------------------------------------------
+%%
+%% RABBITMQ_FEATURE_FLAGS_FILE
+%%   File used to store enabled feature flags.
+%%   Default: ${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-feature_flags
+
+feature_flags_file(Context) ->
+    FFFile = get_feature_flags_file(Context),
+    Context#{feature_flags_file => FFFile}.
+
+get_feature_flags_file(#{mnesia_base_dir := MnesiaBaseDir,
+                         nodename := Nodename}) ->
+    Default = filename:join(MnesiaBaseDir,
+                            atom_to_list(Nodename) ++ "-feature_flags"),
+    File = rabbitmq_prelaunch_helpers:get_env_var(
+            "RABBITMQ_FEATURE_FLAGS_FILE", Default),
     rabbitmq_prelaunch_helpers:normalize_path(File).
 
 %% -------------------------------------------------------------------

@@ -67,7 +67,8 @@ exit(Reason) when is_atom(Reason) ->
 exit(Status) when is_integer(Status) ->
     init:stop(Status).
 
-reason_to_sysexit(ex_usage)    -> 64;
-reason_to_sysexit(ex_dataerr)  -> 65;
-reason_to_sysexit(ex_software) -> 70;
-reason_to_sysexit(ex_config)   -> 78.
+reason_to_sysexit(ex_usage)     -> 64;
+reason_to_sysexit(ex_dataerr)   -> 65;
+reason_to_sysexit(ex_software)  -> 70;
+reason_to_sysexit(ex_cantcreat) -> 73;
+reason_to_sysexit(ex_config)    -> 78.
