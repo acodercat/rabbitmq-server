@@ -26,12 +26,7 @@ stop_mnesia() ->
     rabbit_log_prelaunch:debug("Stopping Mnesia to setup distribution"),
     mnesia:stop().
 
-do_setup(#{nodename := Node,
-           nodename_type := NameType,
-           erlang_dist_tcp_port := DistTcpPort}) ->
-    ok = application:set_env(kernel, inet_dist_listen_min, DistTcpPort),
-    ok = application:set_env(kernel, inet_dist_listen_max, DistTcpPort),
-
+do_setup(#{nodename := Node, nodename_type := NameType}) ->
     case application:get_env(kernel, net_ticktime) of
         {ok, Ticktime} when is_integer(Ticktime) andalso Ticktime >= 1 ->
             %% The value passed to net_kernel:start/1 is the

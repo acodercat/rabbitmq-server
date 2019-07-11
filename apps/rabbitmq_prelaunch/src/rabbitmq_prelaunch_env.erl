@@ -1,30 +1,32 @@
 -module(rabbitmq_prelaunch_env).
 
--export([get_early_context/0,
-         get_context/1,
-         log_context/1]).
+-export([get_context_before_logging_init/0,
+         get_context_after_logging_init/1,
+         log_context/1,
+         context_to_app_env_vars/1,
+         context_to_app_env_vars_no_logging/1]).
 
-get_early_context() ->
+get_context_before_logging_init() ->
     %% The order of steps below is important because some of them
     %% depends on previous steps.
     Steps = [
              fun node_name_and_type/1,
-             fun log_levels/1
-            ],
-
-    run_context_steps(context_base(), Steps).
-
-get_context(EarlyContext) ->
-    %% The order of steps below is important because some of them
-    %% depends on previous steps.
-    Steps = [
+             fun log_levels/1,
              fun config_files/1,
              fun log_files/1,
              fun mnesia_dir/1,
              fun quorum_dir/1,
              fun pid_file/1,
              fun feature_flags_file/1,
-             fun plugins_dirs/1,
+             fun plugins_dirs/1
+            ],
+
+    run_context_steps(context_base(), Steps).
+
+get_context_after_logging_init(EarlyContext) ->
+    %% The order of steps below is important because some of them
+    %% depends on previous steps.
+    Steps = [
              fun tcp_configuration/1
             ],
 
@@ -45,9 +47,64 @@ log_context(Context) ->
     lists:foreach(
       fun(Key) ->
               Value = maps:get(Key, Context),
-              rabbit_log_prelaunch:debug("  ~s: ~p", [Key, Value])
+              rabbit_log_prelaunch:debug("  - ~s: ~p", [Key, Value])
       end,
       lists:sort(maps:keys(Context))).
+
+context_to_app_env_vars(Context) ->
+    rabbit_log_prelaunch:debug(
+      "Setting default application environment variables:"),
+    Fun = fun({App, Param, Value}) ->
+                  rabbit_log_prelaunch:debug(
+                    "  - ~s:~s = ~p", [App, Param, Value]),
+                  ok = application:set_env(
+                         App, Param, Value, [{persistent, true}])
+          end,
+    context_to_app_env_vars1(Context, Fun).
+
+context_to_app_env_vars_no_logging(Context) ->
+    Fun = fun({App, Param, Value}) ->
+                  ok = application:set_env(
+                         App, Param, Value, [{persistent, true}])
+          end,
+    context_to_app_env_vars1(Context, Fun).
+
+context_to_app_env_vars1(
+  #{erlang_dist_tcp_port := DistTcpPort,
+    mnesia_dir := MnesiaDir,
+    feature_flags_file := FFFile,
+    quorum_queue_dir := QuorumQueueDir,
+    plugins_path := PluginsPath,
+    plugins_expand_dir := PluginsExpandDir,
+    enabled_plugins_file := EnabledPluginsFile} = Context,
+  Fun) ->
+    lists:foreach(
+      Fun,
+      %% Those are all the application environment variables which
+      %% were historically set on the erl(1) command line in
+      %% rabbitmq-server(8).
+      [{kernel, inet_dist_listen_min, DistTcpPort},
+       {kernel, inet_dist_listen_max, DistTcpPort},
+       {kernel, inet_default_connect_options, [{nodelay, true}]},
+       {sasl, errlog_type, error},
+       {os_mon, start_cpu_sup, false},
+       {os_mon, start_disksup, false},
+       {os_mon, start_memsup, false},
+       {mnesia, dir, MnesiaDir},
+       {ra, data_dir, QuorumQueueDir},
+       {rabbit, feature_flags_file, FFFile},
+       {rabbit, plugins_dir, PluginsPath},
+       {rabbit, plugins_expand_dir, PluginsExpandDir},
+       {rabbit, enabled_plugins_file, EnabledPluginsFile}]),
+
+    case Context of
+        #{amqp_ipaddr_and_tcp_port := {IpAddr, TcpPort}}
+          when IpAddr /= undefined andalso TcpPort /= undefined ->
+            Fun({rabbit, tcp_listeners, [{IpAddr, TcpPort}]});
+        _ ->
+            ok
+    end,
+    ok.
 
 %% -------------------------------------------------------------------
 %%
@@ -70,8 +127,7 @@ node_name_and_type(Context) ->
              nodename_type => NameType}.
 
 get_node_name_type() ->
-    UseLongname = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-                    "RABBITMQ_USE_LONGNAME"),
+    UseLongname = get_prefixed_env_var("RABBITMQ_USE_LONGNAME"),
     case UseLongname of
         "true" -> longnames;
         _      -> shortnames
@@ -135,24 +191,24 @@ config_files(Context) ->
 get_config_base_dir(#{os_type := {unix, _}}) ->
     SysPrefix = get_sys_prefix(),
     Dir = filename:join([SysPrefix, "etc", "rabbitmq"]),
-    rabbitmq_prelaunch_helpers:normalize_path(Dir);
+    normalize_path(Dir);
 get_config_base_dir(#{os_type := {win32, _}}) ->
     Dir = get_rabbitmq_base(),
-    rabbitmq_prelaunch_helpers:normalize_path(Dir).
+    normalize_path(Dir).
 
 get_main_config_file_noex(ConfigBaseDir) ->
-    File = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+    File = get_prefixed_env_var(
              "RABBITMQ_CONFIG_FILE",
              filename:join(ConfigBaseDir, "rabbitmq")),
     File1 = re:replace(File, "\\.(conf|config)$", "", [{return, list}]),
-    rabbitmq_prelaunch_helpers:normalize_path(File1).
+    normalize_path(File1).
 
 get_advanced_config_file_noex(ConfigBaseDir) ->
-    File = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+    File = get_prefixed_env_var(
              "RABBITMQ_ADVANCED_CONFIG_FILE",
              filename:join(ConfigBaseDir, "advanced")),
     File1 = re:replace(File, "\\.config$", "", [{return, list}]),
-    rabbitmq_prelaunch_helpers:normalize_path(File1).
+    normalize_path(File1).
 
 %% -------------------------------------------------------------------
 %%
@@ -186,12 +242,11 @@ log_files(Context) ->
              upgrade_log_file => UpgradeLogFile}.
 
 get_log_levels() ->
-      LogValue = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-                   "RABBITMQ_LOG"),
-      case LogValue of
-          false -> undefined;
-          _     -> get_log_levels1(string:lexemes(LogValue, ","), #{})
-      end.
+    LogValue = get_prefixed_env_var("RABBITMQ_LOG"),
+    case LogValue of
+        false -> undefined;
+        _     -> get_log_levels1(string:lexemes(LogValue, ","), #{})
+    end.
 
 get_log_levels1([CategoryValue | Rest], Result) ->
     case string:lexemes(CategoryValue, "=") of
@@ -236,31 +291,24 @@ parse_level(_)           -> undefined.
 get_log_base_dir(#{os_type := {unix, _}}) ->
     SysPrefix = get_sys_prefix(),
     Default = filename:join([SysPrefix, "etc", "rabbitmq"]),
-    rabbitmq_prelaunch_helpers:normalize_path(
-      rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-        "RABBITMQ_LOG_BASE", Default));
+    normalize_path(get_prefixed_env_var("RABBITMQ_LOG_BASE", Default));
 get_log_base_dir(#{os_type := {win32, _}}) ->
     RabbitmqBase = get_rabbitmq_base(),
     Default = filename:join([RabbitmqBase, "log"]),
-    rabbitmq_prelaunch_helpers:normalize_path(
-      rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-        "RABBITMQ_LOG_BASE", Default)).
+    normalize_path(get_prefixed_env_var("RABBITMQ_LOG_BASE", Default)).
 
 get_main_log_file(#{nodename := Nodename}, LogBaseDir) ->
     Default = filename:join(LogBaseDir, atom_to_list(Nodename) ++ ".log"),
-    Value = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-              "RABBITMQ_LOGS", Default),
+    Value = get_prefixed_env_var("RABBITMQ_LOGS", Default),
     case Value of
         "-" -> Value;
-        _   -> rabbitmq_prelaunch_helpers:normalize_path(Value)
+        _   -> normalize_path(Value)
     end.
 
 get_upgrade_log_file(#{nodename := Nodename}, LogBaseDir) ->
     Default = filename:join(LogBaseDir,
                             atom_to_list(Nodename) ++ "_upgrade.log"),
-    rabbitmq_prelaunch_helpers:normalize_path(
-      rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-        "RABBITMQ_UPGRADE_LOG", Default)).
+    normalize_path(get_prefixed_env_var("RABBITMQ_UPGRADE_LOG", Default)).
 
 %% -------------------------------------------------------------------
 %%
@@ -281,9 +329,8 @@ mnesia_dir(Context) ->
 
 get_mnesia_base_dir(Context) ->
     Default = get_default_mnesia_base_dir(Context),
-    Dir = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-            "RABBITMQ_MNESIA_BASE", Default),
-    rabbitmq_prelaunch_helpers:normalize_path(Dir).
+    Dir = get_prefixed_env_var("RABBITMQ_MNESIA_BASE", Default),
+    normalize_path(Dir).
 
 get_default_mnesia_base_dir(Context) ->
     DataDir = get_rabbitmq_data_dir(Context),
@@ -294,9 +341,10 @@ get_default_mnesia_base_dir(Context) ->
     filename:join(DataDir, Basename).
 
 get_mnesia_dir(#{nodename := Nodename}, MnesiaBaseDir) ->
-    Dir = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-            "RABBITMQ_MNESA_DIR", filename:join(MnesiaBaseDir, Nodename)),
-    rabbitmq_prelaunch_helpers:normalize_path(Dir).
+    Dir = get_prefixed_env_var(
+            "RABBITMQ_MNESA_DIR",
+            filename:join(MnesiaBaseDir, Nodename)),
+    normalize_path(Dir).
 
 %% -------------------------------------------------------------------
 %%
@@ -310,9 +358,8 @@ quorum_dir(Context) ->
 
 get_quorum_queue_dir(#{mnesia_dir := MnesiaDir}) ->
     Default = filename:join(MnesiaDir, "quorum"),
-    Dir = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-            "RABBITMQ_QUORUM_DIR", Default),
-    rabbitmq_prelaunch_helpers:normalize_path(Dir).
+    Dir = get_prefixed_env_var("RABBITMQ_QUORUM_DIR", Default),
+    normalize_path(Dir).
 
 %% -------------------------------------------------------------------
 %%
@@ -328,10 +375,10 @@ pid_file(#{os_type := {win32, _}} = Context) ->
 
 get_pid_file_path(#{mnesia_base_dir := MnesiaBaseDir,
                     nodename := Nodename}) ->
-    File = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-      "RABBITMQ_PID_FILE",
-      filename:join(MnesiaBaseDir, atom_to_list(Nodename) ++ ".pid")),
-    rabbitmq_prelaunch_helpers:normalize_path(File).
+    File = get_prefixed_env_var(
+             "RABBITMQ_PID_FILE",
+             filename:join(MnesiaBaseDir, atom_to_list(Nodename) ++ ".pid")),
+    normalize_path(File).
 
 %% -------------------------------------------------------------------
 %%
@@ -347,9 +394,8 @@ get_feature_flags_file(#{mnesia_base_dir := MnesiaBaseDir,
                          nodename := Nodename}) ->
     Default = filename:join(MnesiaBaseDir,
                             atom_to_list(Nodename) ++ "-feature_flags"),
-    File = rabbitmq_prelaunch_helpers:get_env_var(
-            "RABBITMQ_FEATURE_FLAGS_FILE", Default),
-    rabbitmq_prelaunch_helpers:normalize_path(File).
+    File = get_env_var("RABBITMQ_FEATURE_FLAGS_FILE", Default),
+    normalize_path(File).
 
 %% -------------------------------------------------------------------
 %%
@@ -374,9 +420,7 @@ plugins_dirs(Context) ->
              enabled_plugins_file => EnabledPluginsFile}.
 
 get_plugins_path() ->
-    rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-      "RABBITMQ_PLUGINS_DIR",
-      get_default_plugins_path()).
+    get_prefixed_env_var("RABBITMQ_PLUGINS_DIR", get_default_plugins_path()).
 
 get_default_plugins_path() ->
     case rabbitmq_prelaunch_helpers:is_dev_environment() of
@@ -390,7 +434,7 @@ get_default_plugins_path() ->
 
 get_plugins_expand_dir(#{mnesia_base_dir := MnesiaBaseDir,
                          nodename := Nodename}) ->
-    rabbitmq_prelaunch_helpers:get_prefixed_env_var(
+    get_prefixed_env_var(
       "RABBITMQ_PLUGINS_EXPAND_DIR",
       filename:join(MnesiaBaseDir,
                     atom_to_list(Nodename) ++ "-plugins-expand")).
@@ -398,9 +442,7 @@ get_plugins_expand_dir(#{mnesia_base_dir := MnesiaBaseDir,
 get_enabled_plugins_file(Context) ->
     ConfigBaseDir = get_config_base_dir(Context),
     Default = filename:join(ConfigBaseDir, "enabled_plugins"),
-    rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-      "RABBITMQ_ENABLED_PLUGINS_FILE",
-      Default).
+    get_prefixed_env_var("RABBITMQ_ENABLED_PLUGINS_FILE", Default).
 
 %% -------------------------------------------------------------------
 %%
@@ -424,17 +466,14 @@ tcp_configuration(Context) ->
              erlang_dist_tcp_port => DistTcpPort}.
 
 get_amqp_ipaddr() ->
-    rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-      "RABBITMQ_NODE_IP_ADDRESS", "auto").
+    get_prefixed_env_var("RABBITMQ_NODE_IP_ADDRESS", "auto").
 
 get_amqp_tcp_port() ->
     Default = 5672,
-    TcpPortStr = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-      "RABBITMQ_NODE_PORT"),
-    case TcpPortStr of
+    case get_prefixed_env_var("RABBITMQ_NODE_PORT") of
         false ->
             Default;
-        _ ->
+        TcpPortStr ->
             try
                 erlang:list_to_integer(TcpPortStr)
             catch
@@ -448,12 +487,10 @@ get_amqp_tcp_port() ->
 
 get_erlang_dist_tcp_port(AmqpTcpPort) ->
     Default = AmqpTcpPort + 20000,
-    TcpPortStr = rabbitmq_prelaunch_helpers:get_prefixed_env_var(
-      "RABBITMQ_DIST_PORT"),
-    case TcpPortStr of
+    case get_prefixed_env_var("RABBITMQ_DIST_PORT") of
         false ->
             Default;
-        _ ->
+        TcpPortStr ->
             try
                 erlang:list_to_integer(TcpPortStr)
             catch
@@ -481,14 +518,47 @@ get_rabbitmq_data_dir(#{os_type := {win32, _}}) ->
     get_rabbitmq_base().
 
 get_sys_prefix() ->
-    rabbitmq_prelaunch_helpers:normalize_path(
-      rabbitmq_prelaunch_helpers:get_env_var("SYS_PREFIX", "")).
+    normalize_path(get_env_var("SYS_PREFIX", "")).
 
 get_rabbitmq_base() ->
-    case rabbitmq_prelaunch_helpers:get_env_var("RABBITMQ_BASE") of
+    case get_env_var("RABBITMQ_BASE") of
         false ->
-            AppData = rabbitmq_prelaunch_helpers:get_env_var("APPDATA"),
+            AppData = get_env_var("APPDATA"),
             filename:join(AppData, "RabbitMQ");
         Value ->
-            rabbitmq_prelaunch_helpers:normalize_path(Value)
+            normalize_path(Value)
     end.
+
+%% -------------------------------------------------------------------
+%% Helpers.
+%% -------------------------------------------------------------------
+
+get_env_var(VarName) ->
+    case os:getenv(VarName) of
+        false -> false;
+        ""    -> false;
+        Value -> Value
+    end.
+
+get_env_var(VarName, DefaultValue) ->
+    case get_env_var(VarName) of
+        false -> DefaultValue;
+        Value -> Value
+    end.
+
+get_prefixed_env_var("RABBITMQ_" ++ Suffix = VarName) ->
+    case get_env_var(VarName) of
+        false -> get_env_var(Suffix);
+        Value -> Value
+    end.
+
+get_prefixed_env_var(VarName, DefaultValue) ->
+    case get_prefixed_env_var(VarName) of
+        false -> DefaultValue;
+        Value -> Value
+    end.
+
+normalize_path("" = Path) ->
+    Path;
+normalize_path(Path) ->
+    filename:join(filename:split(Path)).

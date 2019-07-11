@@ -8,10 +8,6 @@ setup(#{feature_flags_file := FFFile}) ->
     Parent = filename:dirname(FFFile),
     case rabbitmq_prelaunch_helpers:mkdir_p(Parent) of
         ok ->
-            rabbit_log_prelaunch:debug(
-              "Setting feature flags file to \"~s\"", [FFFile]),
-            ok = application:set_env(
-                   rabbit, feature_flags_file, FFFile, [{persistent, true}]),
             rabbit_log_prelaunch:debug("Initializing feature flags registry"),
             case rabbit_feature_flags:initialize_registry() of
                 ok ->

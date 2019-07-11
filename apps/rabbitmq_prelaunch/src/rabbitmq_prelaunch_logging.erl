@@ -75,7 +75,6 @@ configure_lager(#{log_base_dir := LogBaseDir,
                                      UpgradeLog}
                             end,
 
-    ok = application:set_env(sasl, errlog_type, error),
     ok = application:set_env(sasl, sasl_error_logger, SaslErrorLogger),
     ok = application:set_env(rabbit, lager_log_root, LogBaseDir),
     ok = application:set_env(rabbit, lager_default_file, MainLagerHandler),

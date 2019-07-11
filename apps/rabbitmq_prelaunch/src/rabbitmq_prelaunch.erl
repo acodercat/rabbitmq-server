@@ -7,16 +7,16 @@ run() ->
     ignore.
 
 run(nonode@nohost) ->
-    %% Prepare minimal informations to setup logging.
-    EarlyContext = rabbitmq_prelaunch_env:get_early_context(),
+    %% Get informations to setup logging.
+    Context0 = rabbitmq_prelaunch_env:get_context_before_logging_init(),
 
-    %% Setup minimum logging for the prelaunch phase.
-    ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(
-           EarlyContext, true),
+    %% Setup logging for the prelaunch phase.
+    ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(Context0, true),
 
-    %% Prepare more informations required during setup.
-    Context = rabbitmq_prelaunch_env:get_context(EarlyContext),
+    %% Complete context now that we have logging enabled.
+    Context = rabbitmq_prelaunch_env:get_context_after_logging_init(Context0),
     rabbitmq_prelaunch_env:log_context(Context),
+    rabbitmq_prelaunch_env:context_to_app_env_vars(Context),
 
     %% 1. Write PID file
     write_pid_file(Context),
