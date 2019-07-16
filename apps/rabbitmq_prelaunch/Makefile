@@ -7,13 +7,7 @@ DEPS = rabbit_common lager cuttlefish
 
 dep_cuttlefish = hex 2.2.0
 
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
+
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
-
-LAGER_EXTRA_SINKS += rabbit_log_prelaunch
-
-lager_extra_sinks = $(subst $(space),$(comma),$(LAGER_EXTRA_SINKS))
-LAGER_ERLC_OPTS += +'{parse_transform,lager_transform}' \
-		   +'{lager_extra_sinks,[$(lager_extra_sinks)]}'
-
-ERLC_OPTS += $(LAGER_ERLC_OPTS)
