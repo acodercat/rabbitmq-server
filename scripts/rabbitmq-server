@@ -61,16 +61,23 @@ set -f
 # rabbitmq-defaults scripts.
 ensure_thread_pool_size() {
     if [ -z "${RABBITMQ_IO_THREAD_POOL_SIZE}" ]; then
-        RABBITMQ_IO_THREAD_POOL_SIZE=$(
-            ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
-                      -boot "${CLEAN_BOOT_FILE}" \
-                      -noinput \
-                      -s rabbit_misc report_default_thread_pool_size
-        )
+        RABBITMQ_IO_THREAD_POOL_SIZE=64
+# XXX         RABBITMQ_IO_THREAD_POOL_SIZE=$(
+# XXX             ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
+# XXX                       -boot "${CLEAN_BOOT_FILE}" \
+# XXX                       -noinput \
+# XXX                       -s rabbit_misc report_default_thread_pool_size
+# XXX         )
     fi
 }
 
 start_rabbitmq_server() {
+    set +f
+    for file in "${RABBITMQ_HOME}/plugins"/*.ez; do
+        pa_arg="$pa_arg -pa $file/$(basename "$file" .ez)/ebin"
+    done
+    set -f
+
     # The arguments to -pa are in this order because they are *pre*-pended
     # to the code path. Since we want RABBITMQ_SERVER_CODE_PATH to precede
     # RABBITMQ_EBIN_ROOT, it must come as the second argument here.
@@ -84,7 +91,8 @@ start_rabbitmq_server() {
     RABBITMQ_NODENAME=${RABBITMQ_NODENAME} \
     \
     exec ${ERL_DIR}erl \
-        -pa "$RABBITMQ_EBIN_ROOT" "$RABBITMQ_SERVER_CODE_PATH" \
+        $pa_arg \
+        -pa "$RABBITMQ_SERVER_CODE_PATH" \
         ${RABBITMQ_START_RABBIT} \
         -boot "${SASL_BOOT_FILE}" \
         ${RABBITMQ_CONFIG_ARG} \

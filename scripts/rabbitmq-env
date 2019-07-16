@@ -91,19 +91,19 @@ rmq_realpath() {
     fi
 }
 
-path_contains_existing_directory() {
-    local path="${1:?}"
-    local dir
-    local rc
-    local IFS="
-    "
-    for dir in $(echo "$path" | tr ':' '\n'); do
-        if [ -d "$dir" ]; then
-            return 0
-        fi
-    done
-    return 1
-}
+# XXX path_contains_existing_directory() {
+# XXX     local path="${1:?}"
+# XXX     local dir
+# XXX     local rc
+# XXX     local IFS="
+# XXX     "
+# XXX     for dir in $(echo "$path" | tr ':' '\n'); do
+# XXX         if [ -d "$dir" ]; then
+# XXX             return 0
+# XXX         fi
+# XXX     done
+# XXX     return 1
+# XXX }
 
 RABBITMQ_HOME="$(rmq_realpath "${RABBITMQ_SCRIPTS_DIR}/..")"
 ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
@@ -185,102 +185,42 @@ fi
 ##--- End of overridden <var_name> variables
 
 ## Development-specific environment.
-if [ "${RABBITMQ_DEV_ENV}" ]; then
-    if [ -z "$RABBITMQ_FEATURE_FLAGS_FILE" -o \
-         -z "$RABBITMQ_PLUGINS_DIR" -o \
-         -z "$RABBITMQ_ENABLED_PLUGINS_FILE" ]; then
-        # We need to query the running node for the plugins directory
-        # and the "enabled plugins" file.
-        for arg in "$@"; do
-          case "$arg" in
-            -n)
-              next_is_node=1
-              ;;
-            *)
-              if test "$next_is_node"; then
-                # If the executed script is being passed a remote node
-                # name, use it here to query the remote node.
-                node_arg="-n $arg"
-                break
-              fi
-              ;;
-          esac
-        done
-        eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl $node_arg eval \
-            '{ok, F} = application:get_env(rabbit, feature_flags_file),
-             {ok, P} = application:get_env(rabbit, plugins_dir),
-             {ok, E} = application:get_env(rabbit, enabled_plugins_file),
-             B = os:getenv("RABBITMQ_MNESIA_BASE"),
-             M = os:getenv("RABBITMQ_MNESIA_DIR"),
-             io:format(
-               "feature_flags_file=\"~s\"~n"
-               "plugins_dir=\"~s\"~n"
-               "enabled_plugins_file=\"~s\"~n"
-               "mnesia_base=\"~s\"~n"
-               "mnesia_dir=\"~s\"~n", [F, P, E, B, M]).' \
-            2>/dev/null | grep -E '^(feature_flags_file|plugins_dir|enabled_plugins_file|mnesia_base|mnesia_dir)=') || :)
+# XXX if [ "${RABBITMQ_DEV_ENV}" ]; then
+# XXX     if path_contains_existing_directory "${RABBITMQ_PLUGINS_DIR}" ; then
+# XXX         # RabbitMQ was started with "make run-broker" from its own
+# XXX         # source tree. Take rabbit_common from the plugins directory.
+# XXX         ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
+# XXX     else
+# XXX         # RabbitMQ runs from a testsuite or a plugin. The .ez files are
+# XXX         # not available under RabbitMQ source tree. We need to look at
+# XXX         # $DEPS_DIR and default locations.
+# XXX 
+# XXX         if [ "${DEPS_DIR}" -a -d "${DEPS_DIR}/rabbit_common/ebin" ]; then
+# XXX             # $DEPS_DIR is set, and it contains rabbitmq-common, use
+# XXX             # this.
+# XXX             DEPS_DIR_norm="${DEPS_DIR}"
+# XXX         elif [ -f "${RABBITMQ_SCRIPTS_DIR}/../../../erlang.mk" -a \
+# XXX                -d "${RABBITMQ_SCRIPTS_DIR}/../../rabbit_common/ebin" ]; then
+# XXX             # Look at default locations: "deps" subdirectory inside a
+# XXX             # plugin or the Umbrella.
+# XXX             DEPS_DIR_norm="${RABBITMQ_SCRIPTS_DIR}/../.."
+# XXX         fi
+# XXX         DEPS_DIR_norm=$(rmq_realpath "${DEPS_DIR_norm}")
+# XXX 
+# XXX         ERL_LIBS="${DEPS_DIR_norm}:${ERL_LIBS}"
+# XXX     fi
+# XXX else
+# XXX     if path_contains_existing_directory "${RABBITMQ_PLUGINS_DIR}" ; then
+# XXX         # RabbitMQ was started from its install directory. Take
+# XXX         # rabbit_common from the plugins directory.
+# XXX         ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
+# XXX     fi
+# XXX fi
 
-        if [ "${feature_flags_file}" -a \
-             -z "$RABBITMQ_FEATURE_FLAGS_FILE" ]; then
-            RABBITMQ_FEATURE_FLAGS_FILE="${feature_flags_file}"
-        fi
-        if [ "${plugins_dir}" -a \
-             -z "$RABBITMQ_PLUGINS_DIR" ]; then
-            RABBITMQ_PLUGINS_DIR="${plugins_dir}"
-        fi
-        if [ "${enabled_plugins_file}" -a \
-             -z "$RABBITMQ_ENABLED_PLUGINS_FILE" ]; then
-            RABBITMQ_ENABLED_PLUGINS_FILE="${enabled_plugins_file}"
-        fi
-        if [ "${mnesia_base}" -a \
-             -z "$RABBITMQ_MNESIA_BASE" ]; then
-            RABBITMQ_MNESIA_BASE="${mnesia_base}"
-        fi
-        if [ "${mnesia_dir}" -a \
-             -z "$RABBITMQ_MNESIA_DIR" ]; then
-            RABBITMQ_MNESIA_DIR="${mnesia_dir}"
-        fi
-        if [ "${mnesia_dir}" -a \
-             -z "$RABBITMQ_QUORUM_DIR" ]; then
-            RABBITMQ_QUORUM_DIR="${mnesia_dir}/quorum"
-        fi
-    fi
-
-    if path_contains_existing_directory "${RABBITMQ_PLUGINS_DIR}" ; then
-        # RabbitMQ was started with "make run-broker" from its own
-        # source tree. Take rabbit_common from the plugins directory.
-        ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
-    else
-        # RabbitMQ runs from a testsuite or a plugin. The .ez files are
-        # not available under RabbitMQ source tree. We need to look at
-        # $DEPS_DIR and default locations.
-
-        if [ "${DEPS_DIR}" -a -d "${DEPS_DIR}/rabbit_common/ebin" ]; then
-            # $DEPS_DIR is set, and it contains rabbitmq-common, use
-            # this.
-            DEPS_DIR_norm="${DEPS_DIR}"
-        elif [ -f "${RABBITMQ_SCRIPTS_DIR}/../../../erlang.mk" -a \
-               -d "${RABBITMQ_SCRIPTS_DIR}/../../rabbit_common/ebin" ]; then
-            # Look at default locations: "deps" subdirectory inside a
-            # plugin or the Umbrella.
-            DEPS_DIR_norm="${RABBITMQ_SCRIPTS_DIR}/../.."
-        fi
-        DEPS_DIR_norm=$(rmq_realpath "${DEPS_DIR_norm}")
-
-        ERL_LIBS="${DEPS_DIR_norm}:${ERL_LIBS}"
-    fi
-else
-    if path_contains_existing_directory "${RABBITMQ_PLUGINS_DIR}" ; then
-        # RabbitMQ was started from its install directory. Take
-        # rabbit_common from the plugins directory.
-        ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
-    fi
-fi
-
-ERL_LIBS=${ERL_LIBS%:}
-if [ "$ERL_LIBS" ]; then
-    export ERL_LIBS
-fi
+# XXX ERL_LIBS=${ERL_LIBS%:}
+# XXX if [ "$ERL_LIBS" ]; then
+# XXX     export ERL_LIBS
+# XXX fi
 
 run_escript()
 {
@@ -296,10 +236,6 @@ run_escript()
         -boot "$CLEAN_BOOT_FILE" \
         -noinput -noshell -hidden -smp enable \
         $RABBITMQ_CTL_ERL_ARGS \
-        -kernel inet_dist_listen_min "$RABBITMQ_CTL_DIST_PORT_MIN" \
-        -kernel inet_dist_listen_max "$RABBITMQ_CTL_DIST_PORT_MAX" \
-        -sasl errlog_type error \
-        -mnesia dir "\"$RABBITMQ_MNESIA_DIR\"" \
         -run escript start \
         -escript main "$escript_main" \
         -extra "$escript" "$@"

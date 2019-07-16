@@ -468,8 +468,15 @@ start_it(StartFun) ->
                         true  -> ok;
                         false -> StartFun()
                     end
-                catch Class:Reason ->
-                    boot_error(Class, Reason)
+                catch Class:Reason:Stacktrace ->
+                    try
+                        boot_error(Class, Reason)
+                    catch
+                        _:_ ->
+                            io:format(standard_error,
+                                      "~p:~p~n~p~n",
+                                      [Class, Reason, Stacktrace])
+                    end
                 after
                     unlink(Marker),
                     Marker ! stop,

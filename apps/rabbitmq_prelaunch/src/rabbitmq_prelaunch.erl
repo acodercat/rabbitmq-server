@@ -7,19 +7,32 @@ run() ->
     ignore.
 
 run(nonode@nohost) ->
-    %% Get informations to setup logging.
-    Context0 = rabbitmq_prelaunch_env:get_context_before_logging_init(),
+    Context = try
+                  %% Get informations to setup logging.
+                  Context0 = rabbit_env:get_context_before_logging_init(false),
 
-    %% Setup logging for the prelaunch phase.
-    ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(Context0, true),
+                  %% Set code path.
+                  rabbit_env:context_to_code_path(Context0),
 
-    %% Complete context now that we have logging enabled.
-    Context = rabbitmq_prelaunch_env:get_context_after_logging_init(Context0),
-    rabbitmq_prelaunch_env:log_context(Context),
-    rabbitmq_prelaunch_env:context_to_app_env_vars(Context),
+                  %% Setup logging for the prelaunch phase.
+                  ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(
+                         Context0, true),
+
+                  %% Complete context now that we have logging enabled.
+                  rabbit_env:get_context_after_logging_init(Context0)
+              catch
+                  _:{exit, Reason1} ->
+                      rabbitmq_prelaunch_helpers:exit(Reason1);
+                  Class1:Reason1:Stacktrace1 ->
+                      log_exception(Class1, Reason1, Stacktrace1, false),
+                      rabbitmq_prelaunch_helpers:exit(ex_software)
+              end,
+
+    rabbit_env:log_context(Context),
+    rabbit_env:context_to_app_env_vars(Context),
 
     %% 1. Write PID file
-    write_pid_file(Context),
+    _ = write_pid_file(Context),
 
     %% If one step fails, we remove the PID file and exit with the
     %% provided status code.
@@ -42,18 +55,11 @@ run(nonode@nohost) ->
         %% 7. Clustering
         ok = rabbitmq_prelaunch_cluster:setup(Context)
     catch
-        _:{exit, Reason} ->
+        _:{exit, Reason2} ->
             remove_pid_file(Context),
-            rabbitmq_prelaunch_helpers:exit(Reason);
-        Class:Reason:Stacktrace ->
-            rabbit_log_prelaunch:error(
-              "Exception during prelaunch phase:"),
-            [rabbit_log_prelaunch:error("~s", [Line])
-             || Line <- string:split(
-                          lager:pr_stacktrace(Stacktrace, {Class, Reason}),
-                          [$\n],
-                          all)],
-
+            rabbitmq_prelaunch_helpers:exit(Reason2);
+        Class2:Reason2:Stacktrace2 ->
+            log_exception(Class2, Reason2, Stacktrace2, true),
             remove_pid_file(Context),
             rabbitmq_prelaunch_helpers:exit(ex_software)
     end;
@@ -70,13 +76,13 @@ write_pid_file(#{pid_file := PidFile}) ->
                 ok ->
                     ok;
                 {error, Reason} = Error ->
-                    rabbit_log_prelaunch:error(
+                    rabbit_log_prelaunch:warning(
                       "Failed to write PID file \"~s\": ~s",
                       [PidFile, file:format_error(Reason)]),
                     Error
             end;
         {error, Reason} = Error ->
-            rabbit_log_prelaunch:error(
+            rabbit_log_prelaunch:warning(
               "Failed to create PID file \"~s\" directory: ~s",
               [PidFile, file:format_error(Reason)]),
             Error
@@ -88,3 +94,18 @@ remove_pid_file(#{pid_file := PidFile}) ->
     file:delete(PidFile);
 remove_pid_file(_) ->
     ok.
+
+log_exception(Class, Reason, Stacktrace, true) ->
+    rabbit_log_prelaunch:error("Exception during prelaunch phase:"),
+    [rabbit_log_prelaunch:error("~s", [Line])
+     || Line <- string:split(
+                  lager:pr_stacktrace(Stacktrace, {Class, Reason}),
+                  [$\n],
+                  all)];
+log_exception(Class, Reason, Stacktrace, false) ->
+    io:format(standard_error, "Exception during prelaunch phase:~n", []),
+    [io:format(standard_error, "~s~n", [Line])
+     || Line <- string:split(
+                  lager:pr_stacktrace(Stacktrace, {Class, Reason}),
+                  [$\n],
+                  all)].
