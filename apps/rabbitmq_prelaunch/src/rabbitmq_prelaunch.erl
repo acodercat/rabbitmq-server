@@ -1,6 +1,9 @@
 -module(rabbitmq_prelaunch).
 
--export([run/0]).
+-export([run/0,
+         shutdown_func/1]).
+
+-define(PT_KEY, {?MODULE, shutdown_func_state}).
 
 run() ->
     ok = run(node()),
@@ -32,6 +35,7 @@ run(nonode@nohost) ->
     rabbit_env:context_to_app_env_vars(Context),
 
     %% 1. Write PID file
+    ok = setup_shutdown_func(Context),
     _ = write_pid_file(Context),
 
     %% If one step fails, we remove the PID file and exit with the
@@ -66,6 +70,34 @@ run(nonode@nohost) ->
 run(_) ->
     ok.
 
+setup_shutdown_func(Context) ->
+    ThisMod = ?MODULE,
+    ThisFunc = shutdown_func,
+    ChainedShutdownFunc = application:get_env(kernel, shutdown_func),
+    case ChainedShutdownFunc of
+        {ok, {ChainedMod, ChainedFunc}} ->
+            rabbit_log_prelaunch:debug(
+              "Setting up kernel shutdown function: ~s:~s/1 "
+              "(chained with ~s:~s/1)",
+              [ThisMod, ThisFunc, ChainedMod, ChainedFunc]);
+        _ ->
+            rabbit_log_prelaunch:debug(
+              "Setting up kernel shutdown function: ~s:~s/1",
+              [ThisMod, ThisFunc])
+    end,
+    ok = persistent_term:put(?PT_KEY, {Context, ChainedShutdownFunc}),
+    ok = application:set_env(
+           kernel, shutdown_func, {?MODULE, shutdown_func},
+           [{persistent, true}]).
+
+shutdown_func(Reason) ->
+    {Context, ChainedShutdownFunc} = persistent_term:get(?PT_KEY),
+    remove_pid_file(Context),
+    case ChainedShutdownFunc of
+        {ok, {ChainedMod, ChainedFunc}} -> ChainedMod:ChainedFunc(Reason);
+        _                               -> ok
+    end.
+
 write_pid_file(#{pid_file := PidFile}) ->
     rabbit_log_prelaunch:debug("Writing PID file: ~s", [PidFile]),
     Parent = filename:dirname(PidFile),
@@ -91,7 +123,7 @@ write_pid_file(_) ->
     ok.
 
 remove_pid_file(#{pid_file := PidFile}) ->
-    file:delete(PidFile);
+    _ = file:delete(PidFile);
 remove_pid_file(_) ->
     ok.
 
