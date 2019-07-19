@@ -469,14 +469,7 @@ start_it(StartFun) ->
                         false -> StartFun()
                     end
                 catch Class:Reason:Stacktrace ->
-                    try
-                        boot_error(Class, Reason)
-                    catch
-                        _:_ ->
-                            io:format(standard_error,
-                                      "~p:~p~n~p~n",
-                                      [Class, Reason, Stacktrace])
-                    end
+                    boot_error(Class, Reason, Stacktrace)
                 after
                     unlink(Marker),
                     Marker ! stop,
