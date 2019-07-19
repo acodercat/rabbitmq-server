@@ -60,12 +60,12 @@ load_erlang_term_based_config_file(ConfigFile) ->
               "Failed to load configuration file \"~s\", "
               "incorrect format: ~p",
               [ConfigFile, OtherTerms]),
-            rabbitmq_prelaunch_helpers:exit(ex_config);
+            throw({error, failed_to_parse_configuration_file});
         {error, Reason} ->
             rabbit_log_prelaunch:error(
               "Failed to load configuration file \"~s\": ~s",
               [ConfigFile, file:format_error(Reason)]),
-            rabbitmq_prelaunch_helpers:exit(ex_config)
+            throw({error, failed_to_read_configuration_file})
     end.
 
 load_cuttlefish_config_file(Context,
@@ -77,7 +77,7 @@ load_cuttlefish_config_file(Context,
         [] ->
             rabbit_log_prelaunch:error(
               "No configuration schema found~n", []),
-            rabbitmq_prelaunch_helpers:exit(ex_software);
+            throw({error, no_configuration_schema_found});
         _ ->
             rabbit_log_prelaunch:debug(
               "Configuration schemas found:~n", []),
@@ -105,7 +105,7 @@ load_cuttlefish_config_file(Context,
                         "  - ~s",
                         [cuttlefish_error:xlate(Error)])
                       || Error <- Errors],
-                     rabbitmq_prelaunch_helpers:exit(ex_config);
+                     throw({error, failed_to_generate_configuration_file});
                  ValidConfig ->
                      proplists:delete(vm_args, ValidConfig)
              end,
@@ -181,12 +181,12 @@ override_with_advanced_config(Config, AdvancedConfigFile) ->
               "Failed to load advanced configuration file \"~s\", "
               "incorrect format: ~p",
               [AdvancedConfigFile, OtherTerms]),
-            rabbitmq_prelaunch_helpers:exit(ex_config);
+            throw({error, failed_to_parse_advanced_configuration_file});
         {error, Reason} ->
             rabbit_log_prelaunch:error(
               "Failed to load advanced configuration file \"~s\": ~s",
               [AdvancedConfigFile, file:format_error(Reason)]),
-            rabbitmq_prelaunch_helpers:exit(ex_config)
+            throw({error, failed_to_read_advanced_configuration_file})
     end.
 
 apply_erlang_term_based_config([{App, Vars} | Rest]) ->

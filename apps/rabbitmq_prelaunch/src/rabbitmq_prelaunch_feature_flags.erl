@@ -16,11 +16,11 @@ setup(#{feature_flags_file := FFFile}) ->
                     rabbit_log_prelaunch:error(
                       "Failed to initialize feature flags registry: ~p",
                       [Reason]),
-                    rabbitmq_prelaunch_helpers:exit(ex_software)
+                    throw({error, failed_to_initialize_feature_flags_registry})
             end;
         {error, Reason} ->
             rabbit_log_prelaunch:error(
               "Failed to create feature flags file \"~s\" directory: ~s",
               [FFFile, file:format_error(Reason)]),
-            rabbitmq_prelaunch_helpers:exit(ex_cantcreat)
+            throw({error, failed_to_create_feature_flags_file_directory})
     end.

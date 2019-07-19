@@ -75,11 +75,20 @@ configure_lager(#{log_base_dir := LogBaseDir,
                                      UpgradeLog}
                             end,
 
-    ok = application:set_env(sasl, sasl_error_logger, SaslErrorLogger),
-    ok = application:set_env(rabbit, lager_log_root, LogBaseDir),
-    ok = application:set_env(rabbit, lager_default_file, MainLagerHandler),
-    ok = application:set_env(rabbit, lager_upgrade_file, UpgradeLagerHandler),
     ok = application:set_env(lager, crash_log, "log/crash.log"),
 
+    Fun = fun({App, Var, Value}) ->
+                  case application:get_env(App, Var) of
+                      undefined -> ok = application:set_env(App, Var, Value);
+                      V         -> io:format(standard_error, "Skipping ~s:~s -> ~p~n", [App, Var, V])
+                  end
+          end,
+    Vars = [{sasl, sasl_error_logger, SaslErrorLogger},
+            {rabbit, lager_log_root, LogBaseDir},
+            {rabbit, lager_default_file, MainLagerHandler},
+            {rabbit, lager_upgrade_file, UpgradeLagerHandler}],
+    lists:foreach(Fun, Vars),
+
     ok = rabbit_lager:start_logger(),
+
     ok = enable_prelaunch_logging(Context, false).

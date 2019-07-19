@@ -52,7 +52,7 @@ duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
                     rabbit_log_prelaunch:error(
                       "Node with name ~p already running on ~p",
                       [NodeName, NodeHost]),
-                    rabbitmq_prelaunch_helpers:exit(ex_config);
+                    throw({error, duplicate_node_name});
                 false ->
                     net_kernel:stop(),
                     ok
@@ -61,7 +61,7 @@ duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
             rabbit_log_prelaunch:error(
               "epmd error for host ~s: ~s",
               [NodeHost, rabbit_misc:format_inet_error(EpmdReason)]),
-            rabbitmq_prelaunch_helpers:exit(ex_config)
+            throw({error, epmd_error})
     end.
 
 dist_port_range_check(#{erlang_dist_tcp_port := DistTcpPort}) ->
@@ -69,7 +69,7 @@ dist_port_range_check(#{erlang_dist_tcp_port := DistTcpPort}) ->
         _ when DistTcpPort < 1 orelse DistTcpPort > 65535 ->
             rabbit_log_prelaunch:error(
               "Invalid Erlang distribution TCP port: ~b", [DistTcpPort]),
-            rabbitmq_prelaunch_helpers:exit(ex_config);
+            throw({error, invalid_dist_port_range});
         _ ->
             ok
     end.
@@ -105,4 +105,4 @@ dist_port_use_check_fail(Port, Host) ->
             rabbit_log_prelaunch:error(
               "Distribution port ~b in use by ~s@~s~n", [Port, Name, Host])
     end,
-    rabbitmq_prelaunch_helpers:exit(ex_config).
+    throw({error, dist_port_already_used}).

@@ -6,31 +6,29 @@
 -define(PT_KEY, {?MODULE, shutdown_func_state}).
 
 run() ->
-    ok = run(node()),
-    ignore.
+    try
+        run(node())
+    catch
+        throw:{error, _} = Exception ->
+            Exception;
+        Class:Reason:Stacktrace ->
+            log_exception(Class, Reason, Stacktrace, false),
+            {error, {exception, Class, Reason, Stacktrace}}
+    end.
 
 run(nonode@nohost) ->
-    Context = try
-                  %% Get informations to setup logging.
-                  Context0 = rabbit_env:get_context_before_logging_init(false),
+    %% Get informations to setup logging.
+    Context0 = rabbit_env:get_context_before_logging_init(false),
 
-                  %% Set code path.
-                  rabbit_env:context_to_code_path(Context0),
+    %% Set code path.
+    rabbit_env:context_to_code_path(Context0),
 
-                  %% Setup logging for the prelaunch phase.
-                  ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(
-                         Context0, true),
+    %% Setup logging for the prelaunch phase.
+    ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(
+           Context0, true),
 
-                  %% Complete context now that we have logging enabled.
-                  rabbit_env:get_context_after_logging_init(Context0)
-              catch
-                  _:{exit, Reason1} ->
-                      rabbitmq_prelaunch_helpers:exit(Reason1);
-                  Class1:Reason1:Stacktrace1 ->
-                      log_exception(Class1, Reason1, Stacktrace1, false),
-                      rabbitmq_prelaunch_helpers:exit(ex_software)
-              end,
-
+    %% Complete context now that we have logging enabled.
+    Context = rabbit_env:get_context_after_logging_init(Context0),
     rabbit_env:log_context(Context),
     rabbit_env:context_to_app_env_vars(Context),
 
@@ -38,8 +36,7 @@ run(nonode@nohost) ->
     ok = setup_shutdown_func(Context),
     _ = write_pid_file(Context),
 
-    %% If one step fails, we remove the PID file and exit with the
-    %% provided status code.
+    %% If one step fails, we remove the PID file and return the error.
     try
         %% 2. Feature flags registry
         ok = rabbitmq_prelaunch_feature_flags:setup(Context),
@@ -57,18 +54,22 @@ run(nonode@nohost) ->
         ok = rabbitmq_prelaunch_dist:setup(Context),
 
         %% 7. Clustering
-        ok = rabbitmq_prelaunch_cluster:setup(Context)
+        ok = rabbitmq_prelaunch_cluster:setup(Context),
+
+        %% We return `ignore` to let the supervisor know that there is
+        %% no child process running permanently.
+        ignore
     catch
-        _:{exit, Reason2} ->
+        throw:{error, _} = Exception ->
             remove_pid_file(Context),
-            rabbitmq_prelaunch_helpers:exit(Reason2);
-        Class2:Reason2:Stacktrace2 ->
-            log_exception(Class2, Reason2, Stacktrace2, true),
+            Exception;
+        Class:Reason:Stacktrace ->
+            log_exception(Class, Reason, Stacktrace, true),
             remove_pid_file(Context),
-            rabbitmq_prelaunch_helpers:exit(ex_software)
+            {error, {exception, Class, Reason, Stacktrace}}
     end;
 run(_) ->
-    ok.
+    ignore.
 
 setup_shutdown_func(Context) ->
     ThisMod = ?MODULE,
