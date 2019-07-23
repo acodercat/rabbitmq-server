@@ -18,6 +18,7 @@ MnesiaCore.*
 /test/config_schema_SUITE_data/schema/**
 /xrefr
 /escript
+/sbin/
 rabbit.d
 
 # Generated documentation.
