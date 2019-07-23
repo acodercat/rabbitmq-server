@@ -1,7 +1,6 @@
 -module(rabbit_config).
 
 -export([
-         generate_config_file/5,
          prepare_and_use_config/0,
          prepare_config/1,
          update_app_config/1,
