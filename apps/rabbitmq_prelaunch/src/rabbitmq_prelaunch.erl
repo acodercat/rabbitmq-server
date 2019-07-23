@@ -17,6 +17,9 @@ run() ->
     end.
 
 run(nonode@nohost) ->
+    %% Configure dbg if requested.
+    rabbitmq_prelaunch_logging:enable_quick_dbg(rabbit_env:dbg_config()),
+
     %% Get informations to setup logging.
     Context0 = rabbit_env:get_context_before_logging_init(false),
 

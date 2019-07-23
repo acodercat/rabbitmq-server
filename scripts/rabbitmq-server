@@ -73,9 +73,7 @@ ensure_thread_pool_size() {
 
 start_rabbitmq_server() {
     set +f
-    for file in "${RABBITMQ_HOME}/plugins"/*.ez; do
-        pa_arg="$pa_arg -pa $file/$(basename "$file" .ez)/ebin"
-    done
+    export_default_pa_arg
     set -f
 
     # The arguments to -pa are in this order because they are *pre*-pended

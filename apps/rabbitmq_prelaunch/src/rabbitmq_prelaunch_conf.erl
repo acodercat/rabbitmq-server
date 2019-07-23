@@ -2,9 +2,9 @@
 
 -include_lib("kernel/include/file.hrl").
 -include_lib("stdlib/include/zip.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
 
--export([setup/1]).
+-export([setup/1,
+         generate_config_from_cuttlefish_files/3]).
 
 setup(Context) ->
     rabbit_log_prelaunch:debug(""),
@@ -22,7 +22,7 @@ setup(Context) ->
         {MainConfigFile, cuttlefish} ->
             AdvancedConfigFile = find_actual_advanced_config_file(Context),
             load_cuttlefish_config_file(Context,
-                                        MainConfigFile,
+                                        [MainConfigFile],
                                         AdvancedConfigFile),
             ok;
         undefined ->
@@ -69,8 +69,16 @@ load_erlang_term_based_config_file(ConfigFile) ->
     end.
 
 load_cuttlefish_config_file(Context,
-                            MainConfigFile,
+                            ConfigFiles,
                             AdvancedConfigFile) ->
+    Config = generate_config_from_cuttlefish_files(
+               Context, ConfigFiles, AdvancedConfigFile),
+    apply_erlang_term_based_config(Config),
+    ok.
+
+generate_config_from_cuttlefish_files(Context,
+                                      ConfigFiles,
+                                      AdvancedConfigFile) ->
     %% Load schemas.
     SchemaFiles = find_cuttlefish_schemas(Context),
     case SchemaFiles of
@@ -89,9 +97,9 @@ load_cuttlefish_config_file(Context,
 
     %% Load configuration.
     rabbit_log_prelaunch:debug(
-      "Loading configuration file \"~s\" (Cuttlefish based)",
-      [MainConfigFile]),
-    ConfigFiles = [MainConfigFile],
+      "Loading configuration files (Cuttlefish based):"),
+    [rabbit_log_prelaunch:debug(
+       "  - ~s", [ConfigFile]) || ConfigFile <- ConfigFiles],
     Config0 = cuttlefish_conf:files(ConfigFiles),
 
     %% Finalize configuration, based on the schema.
@@ -111,60 +119,79 @@ load_cuttlefish_config_file(Context,
              end,
 
     %% Apply advanced configuration overrides, if any.
-    Config1 = override_with_advanced_config(Config, AdvancedConfigFile),
+    override_with_advanced_config(Config, AdvancedConfigFile).
 
-    apply_erlang_term_based_config(Config1),
-    ok.
-
-find_cuttlefish_schemas(#{plugins_path := PluginsPath}) ->
-    Plugins = rabbit_plugins:list(PluginsPath),
+find_cuttlefish_schemas(Context) ->
+    Apps = list_apps(Context),
     rabbit_log_prelaunch:debug(
-      "Looking up configuration schemas in RabbitMQ core and "
-      "the following plugins:"),
-    [rabbit_log_prelaunch:debug("  - ~s", [Plugin#plugin.name])
-     || Plugin <- Plugins],
-    find_cuttlefish_schemas(Plugins, []).
+      "Looking up configuration schemas in the following applications:"),
+    find_cuttlefish_schemas(Apps, []).
 
-find_cuttlefish_schemas([Plugin | Rest], AllSchemas) ->
-    Schemas = list_schemas_in_app(Plugin),
+find_cuttlefish_schemas([App | Rest], AllSchemas) ->
+    Schemas = list_schemas_in_app(App),
     find_cuttlefish_schemas(Rest, AllSchemas ++ Schemas);
 find_cuttlefish_schemas([], AllSchemas) ->
-    RabbitDir = code:lib_dir(rabbit),
-    Schemas = list_schemas_in_app(RabbitDir),
-    lists:sort(fun(A,B) -> A < B end, Schemas ++ AllSchemas).
+    lists:sort(fun(A,B) -> A < B end, AllSchemas).
 
-list_schemas_in_app(#plugin{name = PluginName,
-                            version = PluginVersion,
-                            type = Type,
-                            location = Location}) ->
-    SchemaDir = case Type of
-                    ez ->
-                        PluginNameAndVersion = rabbit_misc:format(
-                                                 "~s-~s",
-                                                 [PluginName, PluginVersion]),
-                        filename:join([Location,
-                                       PluginNameAndVersion,
-                                       "priv",
-                                       "schema"]);
-                    dir ->
-                        filename:join([Location,
-                                       "priv",
-                                       "schema"])
-                end,
-    do_list_schemas_in_app(SchemaDir);
-list_schemas_in_app(AppDir) when is_list(AppDir) ->
-    SchemaDir = filename:join([AppDir, "priv", "schema"]),
-    do_list_schemas_in_app(SchemaDir).
+list_apps(#{os_type := {win32, _}, plugins_path := PluginsPath}) ->
+    PluginsDirs = string:lexemes(PluginsPath, ";"),
+    list_apps1(PluginsDirs, []);
+list_apps(#{plugins_path := PluginsPath}) ->
+    PluginsDirs = string:lexemes(PluginsPath, ":"),
+    list_apps1(PluginsDirs, []).
 
-do_list_schemas_in_app(SchemaDir) ->
+
+list_apps1([Dir | Rest], Apps) ->
+    case file:list_dir(Dir) of
+        {ok, Filenames} ->
+            NewApps = [list_to_atom(
+                         hd(
+                           string:split(filename:basename(F, ".ex"), "-")))
+                       || F <- Filenames],
+            Apps1 = lists:umerge(Apps, lists:sort(NewApps)),
+            list_apps1(Rest, Apps1);
+        {error, Reason} ->
+            rabbit_log_prelaunch:error(
+              "Failed to list directory \"~s\" content: ~p",
+              [Dir, file:format_error(Reason)]),
+            throw({error, failed_to_list_plugins_dir_content})
+    end;
+list_apps1([], AppInfos) ->
+    AppInfos.
+
+list_schemas_in_app(App) ->
+    Loaded = case application:load(App) of
+                 ok                           -> true;
+                 {error, {already_loaded, _}} -> true;
+                 {error, _}                   -> false
+             end,
+    case Loaded of
+        true ->
+            case code:priv_dir(App) of
+                {error, bad_name} ->
+                    rabbit_log_prelaunch:debug(
+                      "  [ ] ~s (no readable priv dir)", [App]),
+                    [];
+                PrivDir ->
+                    SchemaDir = filename:join([PrivDir, "schema"]),
+                    do_list_schemas_in_app(App, SchemaDir)
+            end;
+        false ->
+            rabbit_log_prelaunch:debug(
+              "  [ ] ~s (failed to load application)", [App]),
+            []
+    end.
+
+do_list_schemas_in_app(App, SchemaDir) ->
     case erl_prim_loader:list_dir(SchemaDir) of
         {ok, Files} ->
+            rabbit_log_prelaunch:debug("  [x] ~s", [App]),
             [filename:join(SchemaDir, File)
              || [C | _] = File <- Files,
-                C =/= $.
-            ];
+                C =/= $.];
         error ->
-            %% TODO
+            rabbit_log_prelaunch:debug(
+              "  [ ] ~s (no readable schema dir)", [App]),
             []
     end.
 

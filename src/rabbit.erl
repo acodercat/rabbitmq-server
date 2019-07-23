@@ -253,7 +253,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--define(APPS, [os_mon, mnesia, rabbit_common, ra, sysmon_handler, rabbit]).
+-define(APPS, [os_mon, mnesia, rabbit_common, rabbitmq_prelaunch, ra, sysmon_handler, rabbit]).
 
 -define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
@@ -307,9 +307,31 @@ boot() ->
                      % XXX ensure_config(),
                      ok = ensure_application_loaded(),
                      % XXX HipeResult = rabbit_hipe:maybe_hipe_compile(),
-                     %% FIXME
-                     ok = application:set_env(lager, crash_log, false, [{persistent, true}]), % XXX
-                     ok = application:set_env(lager, handlers, [], [{persistent, true}]), % XXX
+                     %% Run the prelaunch phase. Everything is inside
+                     %% the rabbitmq_prelaunch application.
+                     %%
+                     %% This application is started manually before
+                     %% all other applications because it finishes
+                     %% to configure the environment and node. Other
+                     %% applications rely on this.
+                     %%
+                     %% A special case: we configure a couple Lager
+                     %% variables here because rabbitmq_prelaunch
+                     %% depends on Lager and Lager creates files and
+                     %% directories in the current working directory by
+                     %% default. Therefore we disable those files and
+                     %% let rabbitmq_prelaunch reconfigure Lager.
+                     ok = application:set_env(
+                            lager, crash_log, false, [{persistent, true}]),
+                     ok = application:set_env(
+                            lager, handlers, [], [{persistent, true}]),
+                     case application:ensure_all_started(rabbitmq_prelaunch) of
+                         {ok, _} ->
+                             ok;
+                         {error, Reason} ->
+                             Fun = handle_app_error(could_not_start),
+                             Fun(rabbitmq_prelaunch, Reason)
+                     end,
                      % XXX ok = start_logger(),
                      % XXX rabbit_hipe:log_hipe_result(HipeResult),
                      Apps = load_all_apps(),

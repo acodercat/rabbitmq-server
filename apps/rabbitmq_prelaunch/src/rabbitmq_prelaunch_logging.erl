@@ -1,6 +1,7 @@
 -module(rabbitmq_prelaunch_logging).
 
 -export([enable_prelaunch_logging/2,
+         enable_quick_dbg/1,
          setup/1]).
 
 enable_prelaunch_logging(#{log_levels := LogLevels}, LagerEventToStdout) ->
@@ -27,6 +28,14 @@ enable_prelaunch_logging(#{log_levels := LogLevels}, LagerEventToStdout) ->
       rabbit_log_prelaunch_lager_event,
       [{handlers, [{ConsoleBackend, ConsoleOptions}]}]),
     ok.
+
+enable_quick_dbg(#{dbg_output := Output, dbg_mods := Mods}) ->
+    case Output of
+        stdout -> {ok, _} = dbg:tracer();
+        _      -> {ok, _} = dbg:tracer(port, dbg:tracer_port(file, Output))
+    end,
+    {ok, _} = dbg:p(all, c),
+    lists:foreach(fun(M) -> {ok, _} = dbg:tp(M, cx) end, Mods).
 
 setup(Context) ->
     rabbit_log_prelaunch:debug(""),

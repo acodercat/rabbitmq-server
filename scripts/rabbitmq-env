@@ -222,6 +222,14 @@ fi
 # XXX     export ERL_LIBS
 # XXX fi
 
+export_default_pa_arg()
+{
+    for file in "${RABBITMQ_HOME}/plugins"/*.ez; do
+        pa_arg="$pa_arg -pa $file/$(basename "$file" .ez)/ebin"
+    done
+    export pa_arg
+}
+
 run_escript()
 {
     escript_main="${1:?escript_main must be defined}"
@@ -229,10 +237,13 @@ run_escript()
     escript="${1:?escript must be defined}"
     shift
 
+    export_default_pa_arg
+
     # Important: do not quote RABBITMQ_CTL_ERL_ARGS as they must be
     # word-split
     # shellcheck disable=SC2086
     exec "${ERL_DIR}erl" +B \
+        $pa_arg \
         -boot "$CLEAN_BOOT_FILE" \
         -noinput -noshell -hidden -smp enable \
         $RABBITMQ_CTL_ERL_ARGS \
