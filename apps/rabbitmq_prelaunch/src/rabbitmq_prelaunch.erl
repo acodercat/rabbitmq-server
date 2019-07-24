@@ -32,6 +32,7 @@ run(nonode@nohost) ->
 
     %% Complete context now that we have logging enabled.
     Context = rabbit_env:get_context_after_logging_init(Context0),
+    rabbit_env:log_process_env(),
     rabbit_env:log_context(Context),
     rabbit_env:context_to_app_env_vars(Context),
 
