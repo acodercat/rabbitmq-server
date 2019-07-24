@@ -8,9 +8,9 @@ setup(#{nodename := Node, nodename_type := NameType} = Context) ->
     rabbit_log_prelaunch:debug("Node name: ~s (type: ~s)", [Node, NameType]),
     stop_mnesia(),
     ok = rabbit_nodes_common:ensure_epmd(),
-    ok = duplicate_node_check(Context),
     ok = dist_port_range_check(Context),
     ok = dist_port_use_check(Context),
+    ok = duplicate_node_check(Context),
 
     ok = do_setup(Context),
     ok.
@@ -42,7 +42,7 @@ do_setup(#{nodename := Node, nodename_type := NameType}) ->
 %% Check whether a node with the same name is already running
 duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
     PrelaunchName = rabbit_nodes:make(
-                      {NodeName ++ "_prelaunch" ++ os:getpid(),
+                      {NodeName ++ "_prelaunch_" ++ os:getpid(),
                        "localhost"}),
     {ok, _} = net_kernel:start([PrelaunchName, shortnames]),
     case rabbit_nodes:names(NodeHost) of
