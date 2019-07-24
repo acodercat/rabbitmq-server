@@ -53,6 +53,23 @@ ensure_thread_pool_size() {
     fi
 }
 
+check_start_params() {
+    check_not_empty RABBITMQ_BOOT_MODULE
+    check_not_empty SASL_BOOT_FILE
+    check_not_empty RABBITMQ_IO_THREAD_POOL_SIZE
+}
+
+check_not_empty() {
+    local name="${1:?}"
+    local value
+    eval value=\$$name
+    if [ -z "$value" ]; then
+        echo "Error: ENV variable should be defined: $1.
+       Please check rabbitmq-env, rabbitmq-defaults, and ${RABBITMQ_CONF_ENV_FILE} script files"
+        exit 78
+    fi
+}
+
 start_rabbitmq_server() {
     set -e
 
@@ -99,27 +116,9 @@ start_rabbitmq_server() {
 }
 
 stop_rabbitmq_server() {
-    RABBITMQCTL="$(dirname "$0")/rabbitmqctl"
-
-    if ${RABBITMQCTL} -n ${RABBITMQ_NODENAME} status >/dev/null 2>&1; then
-        ${RABBITMQCTL} -n ${RABBITMQ_NODENAME} stop
-    fi
-}
-
-check_start_params() {
-    check_not_empty RABBITMQ_BOOT_MODULE
-    check_not_empty SASL_BOOT_FILE
-    check_not_empty RABBITMQ_IO_THREAD_POOL_SIZE
-}
-
-check_not_empty() {
-    local name="${1:?}"
-    local value
-    eval value=\$$name
-    if [ -z "$value" ]; then
-        echo "Error: ENV variable should be defined: $1.
-       Please check rabbitmq-env, rabbitmq-defaults, and ${RABBITMQ_CONF_ENV_FILE} script files"
-        exit 78
+    if test "$rabbitmq_server_pid"; then
+        kill -TERM "$rabbitmq_server_pid"
+        wait "$rabbitmq_server_pid" || true
     fi
 }
 
@@ -158,7 +157,7 @@ else
     trap "stop_rabbitmq_server; exit 130" INT
 
     start_rabbitmq_server "$@" &
-    rabbitmq_server_pid=$!
+    export rabbitmq_server_pid=$!
 
     # Block until RabbitMQ exits or a signal is caught.
     # Waits for last command (which is start_rabbitmq_server)
@@ -176,5 +175,5 @@ else
     # force that statement to succeed and the signal handler to properly
     # execute. Because the statement below has an exit code of 0, the
     # signal handler has to restate the expected exit code.
-    wait $rabbitmq_server_pid || true
+    wait "$rabbitmq_server_pid" || true
 fi
