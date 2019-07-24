@@ -91,20 +91,6 @@ rmq_realpath() {
     fi
 }
 
-# XXX path_contains_existing_directory() {
-# XXX     local path="${1:?}"
-# XXX     local dir
-# XXX     local rc
-# XXX     local IFS="
-# XXX     "
-# XXX     for dir in $(echo "$path" | tr ':' '\n'); do
-# XXX         if [ -d "$dir" ]; then
-# XXX             return 0
-# XXX         fi
-# XXX     done
-# XXX     return 1
-# XXX }
-
 RABBITMQ_HOME="$(rmq_realpath "${RABBITMQ_SCRIPTS_DIR}/..")"
 ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 
@@ -156,12 +142,6 @@ fi
 ##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
 # FIXME
-[ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
-[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=${CTL_DIST_PORT_MIN}
-[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=${CTL_DIST_PORT_MAX}
-[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=$((${RABBITMQ_DIST_PORT} + 10000))
-[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=$((${RABBITMQ_DIST_PORT} + 10010))
-
 [ "x" = "x$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE=${IO_THREAD_POOL_SIZE}
 [ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_ERL_ARGS}
 [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
@@ -184,50 +164,11 @@ fi
 
 ##--- End of overridden <var_name> variables
 
-## Development-specific environment.
-# XXX if [ "${RABBITMQ_DEV_ENV}" ]; then
-# XXX     if path_contains_existing_directory "${RABBITMQ_PLUGINS_DIR}" ; then
-# XXX         # RabbitMQ was started with "make run-broker" from its own
-# XXX         # source tree. Take rabbit_common from the plugins directory.
-# XXX         ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
-# XXX     else
-# XXX         # RabbitMQ runs from a testsuite or a plugin. The .ez files are
-# XXX         # not available under RabbitMQ source tree. We need to look at
-# XXX         # $DEPS_DIR and default locations.
-# XXX 
-# XXX         if [ "${DEPS_DIR}" -a -d "${DEPS_DIR}/rabbit_common/ebin" ]; then
-# XXX             # $DEPS_DIR is set, and it contains rabbitmq-common, use
-# XXX             # this.
-# XXX             DEPS_DIR_norm="${DEPS_DIR}"
-# XXX         elif [ -f "${RABBITMQ_SCRIPTS_DIR}/../../../erlang.mk" -a \
-# XXX                -d "${RABBITMQ_SCRIPTS_DIR}/../../rabbit_common/ebin" ]; then
-# XXX             # Look at default locations: "deps" subdirectory inside a
-# XXX             # plugin or the Umbrella.
-# XXX             DEPS_DIR_norm="${RABBITMQ_SCRIPTS_DIR}/../.."
-# XXX         fi
-# XXX         DEPS_DIR_norm=$(rmq_realpath "${DEPS_DIR_norm}")
-# XXX 
-# XXX         ERL_LIBS="${DEPS_DIR_norm}:${ERL_LIBS}"
-# XXX     fi
-# XXX else
-# XXX     if path_contains_existing_directory "${RABBITMQ_PLUGINS_DIR}" ; then
-# XXX         # RabbitMQ was started from its install directory. Take
-# XXX         # rabbit_common from the plugins directory.
-# XXX         ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
-# XXX     fi
-# XXX fi
-
-# XXX ERL_LIBS=${ERL_LIBS%:}
-# XXX if [ "$ERL_LIBS" ]; then
-# XXX     export ERL_LIBS
-# XXX fi
-
-export_default_pa_arg()
+set_default_pa_arg()
 {
     for file in "${RABBITMQ_HOME}/plugins"/*.ez; do
         pa_arg="$pa_arg -pa $file/$(basename "$file" .ez)/ebin"
     done
-    export pa_arg
 }
 
 run_escript()
@@ -237,7 +178,7 @@ run_escript()
     escript="${1:?escript must be defined}"
     shift
 
-    export_default_pa_arg
+    set_default_pa_arg
 
     # Important: do not quote RABBITMQ_CTL_ERL_ARGS as they must be
     # word-split
