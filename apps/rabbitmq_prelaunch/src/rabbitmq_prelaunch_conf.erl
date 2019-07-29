@@ -3,6 +3,8 @@
 -include_lib("kernel/include/file.hrl").
 -include_lib("stdlib/include/zip.hrl").
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 -export([setup/1,
          generate_config_from_cuttlefish_files/3]).
 
@@ -14,6 +16,8 @@ setup(Context) ->
     %% adapt it to accept configuration file names as arguments?
 
     %% TODO: Check if directories/files are inside Mnesia dir.
+
+    update_enabled_plugins_file(Context),
 
     case find_actual_main_config_file(Context) of
         {MainConfigFile, erlang} ->
@@ -27,6 +31,37 @@ setup(Context) ->
             ok;
         undefined ->
             ok
+    end.
+
+update_enabled_plugins_file(#{enabled_plugins := undefined}) ->
+    ok;
+update_enabled_plugins_file(#{enabled_plugins := all,
+                              plugins_path := Path} = Context) ->
+    List = [P#plugin.name || P <- rabbit_plugins:list(Path)],
+    update_enabled_plugins_file(Context, List);
+update_enabled_plugins_file(#{enabled_plugins := List} = Context) ->
+    update_enabled_plugins_file(Context, List).
+
+update_enabled_plugins_file(#{enabled_plugins_file := File}, List) ->
+    SortedList = lists:usort(List),
+    case SortedList of
+        [] ->
+            rabbit_log_prelaunch:debug("Marking all plugins as disabled");
+        _ ->
+            rabbit_log_prelaunch:debug(
+              "Marking the following plugins as enabled:"),
+            [rabbit_log_prelaunch:debug("  - ~s", [P]) || P <- SortedList]
+    end,
+    Content = io_lib:format("~p.~n", [SortedList]),
+    case file:write_file(File, Content) of
+        ok ->
+            ok;
+        {error, Reason} = Error ->
+            rabbit_log_prelaunch:error(
+              "Failed to update enabled plugins file \"~s\" "
+              "from $RABBITMQ_ENABLED_PLUGINS: ~s",
+              [File, file:format_error(Reason)]),
+            Error
     end.
 
 find_actual_main_config_file(#{main_config_file_noex := FileNoEx}) ->
