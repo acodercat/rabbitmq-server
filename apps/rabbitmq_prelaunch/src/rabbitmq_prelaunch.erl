@@ -127,6 +127,8 @@ write_pid_file(#{pid_file := PidFile}) ->
 write_pid_file(_) ->
     ok.
 
+remove_pid_file(#{keep_pid_file_on_exit := true}) ->
+    ok;
 remove_pid_file(#{pid_file := PidFile}) ->
     _ = file:delete(PidFile);
 remove_pid_file(_) ->
