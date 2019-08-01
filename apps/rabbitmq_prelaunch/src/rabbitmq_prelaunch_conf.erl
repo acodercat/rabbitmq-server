@@ -56,12 +56,12 @@ update_enabled_plugins_file(#{enabled_plugins_file := File}, List) ->
     case file:write_file(File, Content) of
         ok ->
             ok;
-        {error, Reason} = Error ->
+        {error, Reason} ->
             rabbit_log_prelaunch:error(
               "Failed to update enabled plugins file \"~s\" "
               "from $RABBITMQ_ENABLED_PLUGINS: ~s",
               [File, file:format_error(Reason)]),
-            Error
+            throw({error, failed_to_update_enabled_plugins_file})
     end.
 
 find_actual_main_config_file(#{main_config_file_noex := FileNoEx}) ->
