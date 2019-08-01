@@ -136,14 +136,18 @@ init_per_group(clustering, Config) ->
                 [{rmq_nodes_count, 2},
                  {rmq_nodes_clustered, false},
                  {start_rmq_with_plugins_disabled, true}]),
-    build_my_plugin(Config1);
+    rabbit_ct_helpers:run_setup_steps(Config1, [
+        fun build_my_plugin/1
+      ]);
 init_per_group(activating_plugin, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
                 [{rmq_nodes_count, 2},
                  {rmq_nodes_clustered, true},
                  {start_rmq_with_plugins_disabled, true}]),
-    build_my_plugin(Config1);
+    rabbit_ct_helpers:run_setup_steps(Config1, [
+        fun build_my_plugin/1
+      ]);
 init_per_group(_, Config) ->
     Config.
 
@@ -889,12 +893,30 @@ build_my_plugin(Config) ->
                     {"DEPS_DIR=~s", [DepsDir]}],
             case rabbit_ct_helpers:make(Config1, PluginSrcDir, Args) of
                 {ok, _} ->
-                    Config1;
+                    update_cli_path(Config1, PluginSrcDir);
                 {error, _} ->
                     {skip, "Failed to compile the `my_plugin` test plugin"}
             end;
         _ ->
-            Config1
+            update_cli_path(Config1, PluginSrcDir)
+    end.
+
+update_cli_path(Config, PluginSrcDir) ->
+    SbinDir = filename:join(PluginSrcDir, "sbin"),
+    Rabbitmqctl = filename:join(SbinDir, "rabbitmqctl"),
+    RabbitmqPlugins = filename:join(SbinDir, "rabbitmq-plugins"),
+    RabbitmqQueues = filename:join(SbinDir, "rabbitmq-queues"),
+    case filelib:is_regular(Rabbitmqctl) of
+        true ->
+            ct:pal(?LOW_IMPORTANCE,
+                   "Switching to CLI in e.g. ~s", [Rabbitmqctl]),
+            rabbit_ct_helpers:set_config(
+              Config,
+              [{rabbitmqctl_cmd, Rabbitmqctl},
+               {rabbitmq_plugins_cmd, RabbitmqPlugins},
+               {rabbitmq_queues_cmd, RabbitmqQueues}]);
+        false ->
+            Config
     end.
 
 enable_feature_flag_on(Config, Node, FeatureName) ->
