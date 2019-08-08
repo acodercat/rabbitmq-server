@@ -23,17 +23,16 @@ run(nonode@nohost) ->
     %% Get informations to setup logging.
     Context0 = rabbit_env:get_context_before_logging_init(),
 
-    %% Set code path.
-    rabbit_env:context_to_code_path(Context0),
-
     %% Setup logging for the prelaunch phase.
     ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(
            Context0, true),
+    rabbit_env:log_process_env(),
 
     %% Complete context now that we have logging enabled.
     Context = rabbit_env:get_context_after_logging_init(Context0),
-    rabbit_env:log_process_env(),
     rabbit_env:log_context(Context),
+
+    rabbit_env:context_to_code_path(Context),
     rabbit_env:context_to_app_env_vars(Context),
 
     %% 1. Write PID file

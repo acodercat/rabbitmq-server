@@ -48,13 +48,13 @@ set_ERL_CRASH_DUMP_envvar(#{log_base_dir := LogBaseDir}) ->
         false ->
             ErlCrashDump = filename:join(LogBaseDir, "erl_crash.dump"),
             rabbit_log_prelaunch:debug(
-              "Setting $ERL_CRASH_DUMP environment variable to \"~s\"",
+              "Setting $ERL_CRASH_DUMP environment variable to \"~ts\"",
               [ErlCrashDump]),
             os:putenv("ERL_CRASH_DUMP", ErlCrashDump),
             ok;
         ErlCrashDump ->
             rabbit_log_prelaunch:debug(
-              "$ERL_CRASH_DUMP environment variable already set to \"~s\"",
+              "$ERL_CRASH_DUMP environment variable already set to \"~ts\"",
               [ErlCrashDump]),
             ok
     end.
@@ -76,7 +76,7 @@ configure_lager(#{log_base_dir := LogBaseDir,
                                     rabbit_log_prelaunch:debug(
                                       "Logging to:"),
                                     [rabbit_log_prelaunch:debug(
-                                       "  - ~s", [Log])
+                                       "  - ~ts", [Log])
                                      || Log <- [MainLog, UpgradeLog]],
                                     %% Log to file.
                                     {false,
@@ -89,7 +89,7 @@ configure_lager(#{log_base_dir := LogBaseDir,
     Fun = fun({App, Var, Value}) ->
                   case application:get_env(App, Var) of
                       undefined -> ok = application:set_env(App, Var, Value);
-                      V         -> io:format(standard_error, "Skipping ~s:~s -> ~p~n", [App, Var, V])
+                      _         -> ok
                   end
           end,
     Vars = [{sasl, sasl_error_logger, SaslErrorLogger},

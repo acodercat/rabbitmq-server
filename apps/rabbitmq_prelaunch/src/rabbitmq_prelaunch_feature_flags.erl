@@ -20,7 +20,7 @@ setup(#{feature_flags_file := FFFile}) ->
             end;
         {error, Reason} ->
             rabbit_log_prelaunch:error(
-              "Failed to create feature flags file \"~s\" directory: ~s",
+              "Failed to create feature flags file \"~ts\" directory: ~ts",
               [FFFile, file:format_error(Reason)]),
             throw({error, failed_to_create_feature_flags_file_directory})
     end.
