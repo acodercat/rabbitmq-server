@@ -23,14 +23,23 @@ setup(Context) ->
         {MainConfigFile, erlang} ->
             load_erlang_term_based_config_file(MainConfigFile),
             ok;
-        {MainConfigFile, cuttlefish} ->
+        Other ->
             AdvancedConfigFile = find_actual_advanced_config_file(Context),
-            load_cuttlefish_config_file(Context,
-                                        [MainConfigFile],
-                                        AdvancedConfigFile),
-            ok;
-        undefined ->
-            ok
+            case AdvancedConfigFile of
+                undefined ->
+                    ok;
+                _ ->
+                    ConfigFiles = case Other of
+                                      {MainConfigFile, cuttlefish} ->
+                                          [MainConfigFile];
+                                      undefined ->
+                                          []
+                                  end,
+                    load_cuttlefish_config_file(Context,
+                                                ConfigFiles,
+                                                AdvancedConfigFile),
+                    ok
+            end
     end.
 
 update_enabled_plugins_file(#{enabled_plugins := undefined}) ->
@@ -58,8 +67,8 @@ update_enabled_plugins_file(#{enabled_plugins_file := File}, List) ->
             ok;
         {error, Reason} ->
             rabbit_log_prelaunch:error(
-              "Failed to update enabled plugins file \"~s\" "
-              "from $RABBITMQ_ENABLED_PLUGINS: ~s",
+              "Failed to update enabled plugins file \"~ts\" "
+              "from $RABBITMQ_ENABLED_PLUGINS: ~ts",
               [File, file:format_error(Reason)]),
             throw({error, failed_to_update_enabled_plugins_file})
     end.
@@ -86,19 +95,19 @@ find_actual_advanced_config_file(#{advanced_config_file_noex := FileNoEx}) ->
 
 load_erlang_term_based_config_file(ConfigFile) ->
     rabbit_log_prelaunch:debug(
-      "Loading configuration file \"~s\" (Erlang terms based)", [ConfigFile]),
+      "Loading configuration file \"~ts\" (Erlang terms based)", [ConfigFile]),
     case file:consult(ConfigFile) of
         {ok, [Config]} ->
             apply_erlang_term_based_config(Config);
         {ok, OtherTerms} ->
             rabbit_log_prelaunch:error(
-              "Failed to load configuration file \"~s\", "
+              "Failed to load configuration file \"~ts\", "
               "incorrect format: ~p",
               [ConfigFile, OtherTerms]),
             throw({error, failed_to_parse_configuration_file});
         {error, Reason} ->
             rabbit_log_prelaunch:error(
-              "Failed to load configuration file \"~s\": ~s",
+              "Failed to load configuration file \"~ts\": ~ts",
               [ConfigFile, file:format_error(Reason)]),
             throw({error, failed_to_read_configuration_file})
     end.
@@ -124,7 +133,7 @@ generate_config_from_cuttlefish_files(Context,
         _ ->
             rabbit_log_prelaunch:debug(
               "Configuration schemas found:~n", []),
-            [rabbit_log_prelaunch:debug("  - ~s", [SchemaFile])
+            [rabbit_log_prelaunch:debug("  - ~ts", [SchemaFile])
              || SchemaFile <- SchemaFiles],
             ok
     end,
@@ -134,7 +143,7 @@ generate_config_from_cuttlefish_files(Context,
     rabbit_log_prelaunch:debug(
       "Loading configuration files (Cuttlefish based):"),
     [rabbit_log_prelaunch:debug(
-       "  - ~s", [ConfigFile]) || ConfigFile <- ConfigFiles],
+       "  - ~ts", [ConfigFile]) || ConfigFile <- ConfigFiles],
     Config0 = cuttlefish_conf:files(ConfigFiles),
 
     %% Finalize configuration, based on the schema.
@@ -142,10 +151,10 @@ generate_config_from_cuttlefish_files(Context,
                  {error, Phase, {errorlist, Errors}} ->
                      %% TODO
                      rabbit_log_prelaunch:error(
-                       "Error generating configuration in phase ~s:",
+                       "Error generating configuration in phase ~ts:",
                        [Phase, Errors]),
                      [rabbit_log_prelaunch:error(
-                        "  - ~s",
+                        "  - ~ts",
                         [cuttlefish_error:xlate(Error)])
                       || Error <- Errors],
                      throw({error, failed_to_generate_configuration_file});
@@ -187,7 +196,7 @@ list_apps1([Dir | Rest], Apps) ->
             list_apps1(Rest, Apps1);
         {error, Reason} ->
             rabbit_log_prelaunch:error(
-              "Failed to list directory \"~s\" content: ~p",
+              "Failed to list directory \"~ts\" content: ~ts",
               [Dir, file:format_error(Reason)]),
             throw({error, failed_to_list_plugins_dir_content})
     end;
@@ -234,19 +243,20 @@ override_with_advanced_config(Config, undefined) ->
     Config;
 override_with_advanced_config(Config, AdvancedConfigFile) ->
     rabbit_log_prelaunch:debug(
-      "Override with advanced configuration file \"~s\"", [AdvancedConfigFile]),
+      "Override with advanced configuration file \"~ts\"",
+      [AdvancedConfigFile]),
     case file:consult(AdvancedConfigFile) of
         {ok, [AdvancedConfig]} ->
             cuttlefish_advanced:overlay(Config, AdvancedConfig);
         {ok, OtherTerms} ->
             rabbit_log_prelaunch:error(
-              "Failed to load advanced configuration file \"~s\", "
+              "Failed to load advanced configuration file \"~ts\", "
               "incorrect format: ~p",
               [AdvancedConfigFile, OtherTerms]),
             throw({error, failed_to_parse_advanced_configuration_file});
         {error, Reason} ->
             rabbit_log_prelaunch:error(
-              "Failed to load advanced configuration file \"~s\": ~s",
+              "Failed to load advanced configuration file \"~ts\": ~ts",
               [AdvancedConfigFile, file:format_error(Reason)]),
             throw({error, failed_to_read_advanced_configuration_file})
     end.
