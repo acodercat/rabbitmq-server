@@ -97,15 +97,6 @@ ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 ## Set defaults
 . ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults
 
-# We save the current value of $RABBITMQ_PID_FILE in case it was set by
-# an init script. If $CONF_ENV_FILE overrides it again, we must ignore
-# it and warn the user.
-saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
-
-## Get configuration variables from the configure environment file
-[ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE=${CONF_ENV_FILE}
-[ -f ${RABBITMQ_CONF_ENV_FILE} ] && . ${RABBITMQ_CONF_ENV_FILE} || true
-
 [ -n "$ERL_EPMD_PORT" ] && export ERL_EPMD_PORT
 [ -n "$ERL_EPMD_ADDRESS" ] && export ERL_EPMD_ADDRESS
 
@@ -149,16 +140,6 @@ fi
 [ "x" = "x$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH=${SERVER_CODE_PATH}
 [ "x" = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT="true"
 [ "xtrue" = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT_FLAG="+B i"
-
-if [ -n "$saved_RABBITMQ_PID_FILE" ] && \
-    [ "$saved_RABBITMQ_PID_FILE" != "$RABBITMQ_PID_FILE" ]
-then
-    _rmq_env_pwarn 'RABBITMQ_PID_FILE was already set by the init script to:' \
-        "$saved_RABBITMQ_PID_FILE" \
-        'The value set in rabbitmq-env.conf is ignored because it would break the init script.'
-
-    RABBITMQ_PID_FILE="$saved_RABBITMQ_PID_FILE"
-fi
 
 [ "x" = "x$RABBITMQ_BOOT_MODULE" ] && RABBITMQ_BOOT_MODULE=${BOOT_MODULE}
 
