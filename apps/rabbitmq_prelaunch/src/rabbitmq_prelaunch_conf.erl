@@ -204,27 +204,32 @@ list_apps1([], AppInfos) ->
     AppInfos.
 
 list_schemas_in_app(App) ->
-    Loaded = case application:load(App) of
-                 ok                           -> true;
-                 {error, {already_loaded, _}} -> true;
-                 {error, _}                   -> false
-             end,
-    case Loaded of
-        true ->
-            case code:priv_dir(App) of
-                {error, bad_name} ->
-                    rabbit_log_prelaunch:debug(
-                      "  [ ] ~s (no readable priv dir)", [App]),
-                    [];
-                PrivDir ->
-                    SchemaDir = filename:join([PrivDir, "schema"]),
-                    do_list_schemas_in_app(App, SchemaDir)
-            end;
-        false ->
-            rabbit_log_prelaunch:debug(
-              "  [ ] ~s (failed to load application)", [App]),
-            []
-    end.
+    {Loaded, Unload} = case application:load(App) of
+                           ok                           -> {true, true};
+                           {error, {already_loaded, _}} -> {true, false};
+                           {error, _}                   -> {false, false}
+                       end,
+    List = case Loaded of
+               true ->
+                   case code:priv_dir(App) of
+                       {error, bad_name} ->
+                           rabbit_log_prelaunch:debug(
+                             "  [ ] ~s (no readable priv dir)", [App]),
+                           [];
+                       PrivDir ->
+                           SchemaDir = filename:join([PrivDir, "schema"]),
+                           do_list_schemas_in_app(App, SchemaDir)
+                   end;
+               false ->
+                   rabbit_log_prelaunch:debug(
+                     "  [ ] ~s (failed to load application)", [App]),
+                   []
+           end,
+    case Unload of
+        true  -> application:unload(App);
+        false -> ok
+    end,
+    List.
 
 do_list_schemas_in_app(App, SchemaDir) ->
     case erl_prim_loader:list_dir(SchemaDir) of
