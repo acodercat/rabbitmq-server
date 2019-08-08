@@ -48,4 +48,6 @@ case "$RABBITMQ_HOME" in
         ;;
 esac
 
-CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
+if test -z "$CONF_ENV_FILE" && test -z "$RABBITMQ_CONF_ENV_FILE"; then
+    CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
+fi
