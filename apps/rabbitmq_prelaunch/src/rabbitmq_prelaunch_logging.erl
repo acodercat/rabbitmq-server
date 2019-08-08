@@ -4,7 +4,17 @@
          enable_quick_dbg/1,
          setup/1]).
 
-enable_prelaunch_logging(#{log_levels := LogLevels}, LagerEventToStdout) ->
+-define(SINK, rabbit_log_prelaunch_lager_event).
+
+enable_prelaunch_logging(#{log_levels := undefined}, _) ->
+    ok;
+enable_prelaunch_logging(Context, LagerEventToStdout) ->
+    case lists:member(?SINK, lager:list_all_sinks()) of
+        true  -> ok;
+        false -> do_enable_prelaunch_logging(Context, LagerEventToStdout)
+    end.
+
+do_enable_prelaunch_logging(#{log_levels := LogLevels}, LagerEventToStdout) ->
     LogLevel = case LogLevels of
                    #{"prelaunch" := Level} -> Level;
                    #{global := Level}      -> Level;
@@ -25,7 +35,7 @@ enable_prelaunch_logging(#{log_levels := LogLevels}, LagerEventToStdout) ->
             ok
     end,
     lager_app:configure_sink(
-      rabbit_log_prelaunch_lager_event,
+      ?SINK,
       [{handlers, [{ConsoleBackend, ConsoleOptions}]}]),
     ok.
 

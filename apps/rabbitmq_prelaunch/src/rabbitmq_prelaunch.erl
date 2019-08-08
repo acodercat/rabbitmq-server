@@ -24,12 +24,16 @@ run(nonode@nohost) ->
     Context0 = rabbit_env:get_context_before_logging_init(),
 
     %% Setup logging for the prelaunch phase.
-    ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(
-           Context0, true),
+    ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(Context0, true),
     rabbit_env:log_process_env(),
 
-    %% Complete context now that we have logging enabled.
-    Context = rabbit_env:get_context_after_logging_init(Context0),
+    %% Load rabbitmq-env.conf, redo logging setup and continue.
+    Context1 = rabbit_env:get_context_after_logging_init(Context0),
+    ok = rabbitmq_prelaunch_logging:enable_prelaunch_logging(Context1, true),
+    rabbit_env:log_process_env(),
+
+    %% Complete context now that we have the final environment loaded.
+    Context = rabbit_env:get_context_after_reloading_env(Context1),
     rabbit_env:log_context(Context),
 
     rabbit_env:context_to_code_path(Context),
