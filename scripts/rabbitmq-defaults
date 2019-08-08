@@ -47,3 +47,5 @@ case "$RABBITMQ_HOME" in
         PLUGINS_DIR="/usr/lib/rabbitmq/plugins:$PLUGINS_DIR"
         ;;
 esac
+
+CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
