@@ -6,13 +6,18 @@
 
 -define(SINK, rabbit_log_prelaunch_lager_event).
 
-enable_prelaunch_logging(#{log_levels := undefined}, _) ->
-    ok;
+enable_prelaunch_logging(#{log_levels := undefined} = Context,
+                         LagerEventToStdout) ->
+    enable_prelaunch_logging(Context#{log_levels => get_default_log_level()},
+                             LagerEventToStdout);
 enable_prelaunch_logging(Context, LagerEventToStdout) ->
     case lists:member(?SINK, lager:list_all_sinks()) of
         true  -> ok;
         false -> do_enable_prelaunch_logging(Context, LagerEventToStdout)
     end.
+
+get_default_log_level() ->
+    #{"prelaunch" => warning}.
 
 do_enable_prelaunch_logging(#{log_levels := LogLevels}, LagerEventToStdout) ->
     LogLevel = case LogLevels of
