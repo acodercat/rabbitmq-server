@@ -31,20 +31,21 @@ prepare_and_use_config() ->
 %% we support both the classic Erlang term
 %% config file (rabbitmq.config) as well as rabbitmq.conf
 legacy_erlang_term_config_used() ->
-    case init:get_argument(config) of
-        error        -> false;
-        {ok, [Config | _]} ->
-            ConfigFile = Config ++ ".config",
-            rabbit_file:is_file(ConfigFile)
-            andalso
-            get_advanced_config() == none
+    case get_prelaunch_config_state() of
+        #{config_type := erlang,
+          config_advanced_file := undefined} ->
+            true;
+        _ ->
+            false
     end.
 
 get_confs() ->
-    case init:get_argument(conf) of
-        {ok, Confs} -> [ filename:rootname(Conf, ".conf") ++ ".conf"
-                         || Conf <- Confs ];
-        _           -> []
+    case get_prelaunch_config_state() of
+        #{config_files := Confs} ->
+            [ filename:rootname(Conf, ".conf") ++ ".conf"
+              || Conf <- Confs ];
+        _ ->
+            []
     end.
 
 prepare_config(Confs) ->
@@ -174,9 +175,9 @@ check_advanced_config(ConfigName) ->
     end.
 
 get_advanced_config() ->
-    case init:get_argument(conf_advanced) of
+    case get_prelaunch_config_state() of
         %% There can be only one advanced.config
-        {ok, [FileName | _]} ->
+        #{config_advanced_file := FileName} ->
             case rabbit_file:is_file(FileName) of
                 true  -> FileName;
                 false -> none
@@ -194,15 +195,17 @@ prepare_plugin_schemas(SchemaDir) ->
 config_files() ->
     case legacy_erlang_term_config_used() of
         true ->
-            case init:get_argument(config) of
-                {ok, Files} -> [ filename:absname(filename:rootname(File) ++ ".config")
-                                 || [File] <- Files];
-                error       -> case config_setting() of
-                                   none -> [];
-                                   File -> [filename:absname(filename:rootname(File, ".config") ++ ".config")
-                                            ++
-                                            " (not found)"]
-                               end
+            case get_prelaunch_config_state() of
+                #{config_files := Files} ->
+                    [ filename:absname(filename:rootname(File) ++ ".config")
+                      || File <- Files];
+                _ ->
+                    case config_setting() of
+                        none -> [];
+                        File -> [filename:absname(filename:rootname(File, ".config") ++ ".config")
+                                 ++
+                                 " (not found)"]
+                    end
             end;
         false ->
             ConfFiles = [filename:absname(File) || File <- get_confs(),
@@ -215,6 +218,8 @@ config_files() ->
 
     end.
 
+get_prelaunch_config_state() ->
+    application:get_env(rabbitmq_prelaunch, config_state, #{}).
 
 %% This is a pain. We want to know where the config file is. But we
 %% can't specify it on the command line if it is missing or the VM
@@ -226,10 +231,11 @@ config_files() ->
 config_setting() ->
     case application:get_env(rabbit, windows_service_config) of
         {ok, File1} -> File1;
-        undefined   -> case os:getenv("RABBITMQ_CONFIG_FILE") of
-                           false -> none;
-                           File2 -> File2
-                       end
+        undefined   ->
+            case application:get_env(rabbitmq_prelaunch, context) of
+                #{main_config_file_noex := File2} -> File2;
+                _                                 -> none
+            end
     end.
 
 -spec validate_config_files() -> ok | {error, {Fmt :: string(), Args :: list()}}.
