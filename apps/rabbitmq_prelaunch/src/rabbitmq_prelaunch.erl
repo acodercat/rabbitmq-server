@@ -34,6 +34,7 @@ run(nonode@nohost) ->
 
     %% Complete context now that we have the final environment loaded.
     Context = rabbit_env:get_context_after_reloading_env(Context1),
+    rabbitmq_prelaunch_helpers:set_env(context, Context),
     rabbit_env:log_context(Context),
 
     rabbit_env:context_to_code_path(Context),

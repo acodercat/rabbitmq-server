@@ -17,30 +17,41 @@ setup(Context) ->
 
     %% TODO: Check if directories/files are inside Mnesia dir.
 
+    %% TODO: Support glob patterns & directories in RABBITMQ_CONFIG_FILE.
+
     update_enabled_plugins_file(Context),
 
-    case find_actual_main_config_file(Context) of
-        {MainConfigFile, erlang} ->
-            load_erlang_term_based_config_file(MainConfigFile),
-            ok;
-        Other ->
-            AdvancedConfigFile = find_actual_advanced_config_file(Context),
-            case AdvancedConfigFile of
-                undefined ->
-                    ok;
-                _ ->
-                    ConfigFiles = case Other of
-                                      {MainConfigFile, cuttlefish} ->
-                                          [MainConfigFile];
-                                      undefined ->
-                                          []
-                                  end,
+    AdvancedConfigFile = find_actual_advanced_config_file(Context),
+    State = case find_actual_main_config_file(Context) of
+                {MainConfigFile, erlang} ->
+                    load_erlang_term_based_config_file(MainConfigFile),
+                    #{config_type => erlang,
+                      config_files => [MainConfigFile],
+                      config_advanced_file => undefined};
+                {MainConfigFile, cuttlefish} ->
+                    ConfigFiles = [MainConfigFile],
                     load_cuttlefish_config_file(Context,
                                                 ConfigFiles,
                                                 AdvancedConfigFile),
-                    ok
-            end
-    end.
+                    #{config_type => cuttlefish,
+                      config_files => ConfigFiles,
+                      config_advanced_file => AdvancedConfigFile};
+                undefined when AdvancedConfigFile =/= undefined ->
+                    rabbit_log_prelaunch:warning(
+                      "Using RABBITMQ_ADVANCED_CONFIG_FILE: ~s",
+                      [AdvancedConfigFile]),
+                    load_erlang_term_based_config_file(AdvancedConfigFile),
+                    #{config_type => erlang,
+                      config_files => [AdvancedConfigFile],
+                      config_advanced_file => AdvancedConfigFile};
+                undefined ->
+                    #{config_type => undefined,
+                      config_files => [],
+                      config_advanced_file => undefined}
+            end,
+    rabbit_log_prelaunch:debug(
+      "Saving config state to application env: ~p", [State]),
+    rabbitmq_prelaunch_helpers:set_env(config_state, State).
 
 update_enabled_plugins_file(#{enabled_plugins := undefined}) ->
     ok;
@@ -74,14 +85,29 @@ update_enabled_plugins_file(#{enabled_plugins_file := File}, List) ->
     end.
 
 find_actual_main_config_file(#{main_config_file_noex := FileNoEx}) ->
-    File1 = FileNoEx ++ ".conf",
-    case filelib:is_regular(File1) of
+    OldFormatFile = FileNoEx ++ ".config",
+    NewFormatFile = FileNoEx ++ ".conf",
+    case filelib:is_regular(OldFormatFile) of
         true ->
-            {File1, cuttlefish};
+            case filelib:is_regular(NewFormatFile) of
+                true ->
+                    rabbit_log_prelaunch:warning(
+                      "Both old (.config) and new (.conf) format config "
+                      "files exist."),
+                    rabbit_log_prelaunch:warning(
+                      "Using the old format config file: ~s",
+                      [OldFormatFile]),
+                    rabbit_log_prelaunch:warning(
+                      "Please update your config files to the new format "
+                      "and remove the old file."),
+                    ok;
+                false ->
+                    ok
+            end,
+            {OldFormatFile, erlang};
         false ->
-            File2 = FileNoEx ++ ".config",
-            case filelib:is_regular(File2) of
-                true  -> {File2, erlang};
+            case filelib:is_regular(NewFormatFile) of
+                true  -> {NewFormatFile, cuttlefish};
                 false -> undefined
             end
     end.
