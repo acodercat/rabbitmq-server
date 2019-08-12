@@ -5,19 +5,26 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([setup/1,
+-export([setup/0,
+         setup/1,
          generate_config_from_cuttlefish_files/3]).
+
+setup() ->
+    case rabbitmq_prelaunch_helpers:get_env(context) of
+        {ok, Context} ->
+            setup(Context);
+        undefined ->
+            throw({error, initial_setup_not_executed})
+    end.
 
 setup(Context) ->
     rabbit_log_prelaunch:debug(""),
     rabbit_log_prelaunch:debug("== Configuration =="),
 
-    %% TODO: Should we call rabbit_config:validate_config_files/0 and
-    %% adapt it to accept configuration file names as arguments?
-
     %% TODO: Check if directories/files are inside Mnesia dir.
 
     %% TODO: Support glob patterns & directories in RABBITMQ_CONFIG_FILE.
+    %% TODO: Always try parsing of both erlang and cuttlefish formats.
 
     update_enabled_plugins_file(Context),
 
@@ -53,16 +60,24 @@ setup(Context) ->
       "Saving config state to application env: ~p", [State]),
     rabbitmq_prelaunch_helpers:set_env(config_state, State).
 
-update_enabled_plugins_file(#{enabled_plugins := undefined}) ->
+update_enabled_plugins_file(Context) ->
+    %% We only do this on startup, not when the configuration is
+    %% reloaded.
+    case rabbitmq_prelaunch_helpers:get_env(config_state) of
+        {ok, _}   -> ok;
+        undefined -> update_enabled_plugins_file1(Context)
+    end.
+
+update_enabled_plugins_file1(#{enabled_plugins := undefined}) ->
     ok;
-update_enabled_plugins_file(#{enabled_plugins := all,
+update_enabled_plugins_file1(#{enabled_plugins := all,
                               plugins_path := Path} = Context) ->
     List = [P#plugin.name || P <- rabbit_plugins:list(Path)],
-    update_enabled_plugins_file(Context, List);
-update_enabled_plugins_file(#{enabled_plugins := List} = Context) ->
-    update_enabled_plugins_file(Context, List).
+    do_update_enabled_plugins_file(Context, List);
+update_enabled_plugins_file1(#{enabled_plugins := List} = Context) ->
+    do_update_enabled_plugins_file(Context, List).
 
-update_enabled_plugins_file(#{enabled_plugins_file := File}, List) ->
+do_update_enabled_plugins_file(#{enabled_plugins_file := File}, List) ->
     SortedList = lists:usort(List),
     case SortedList of
         [] ->
@@ -123,7 +138,7 @@ load_erlang_term_based_config_file(ConfigFile) ->
     rabbit_log_prelaunch:debug(
       "Loading configuration file \"~ts\" (Erlang terms based)", [ConfigFile]),
     case file:consult(ConfigFile) of
-        {ok, [Config]} ->
+        {ok, [Config]} when is_list(Config) ->
             apply_erlang_term_based_config(Config);
         {ok, OtherTerms} ->
             rabbit_log_prelaunch:error(
