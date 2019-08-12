@@ -183,7 +183,7 @@ run_escript()
     # Important: do not quote RABBITMQ_CTL_ERL_ARGS as they must be
     # word-split
     # shellcheck disable=SC2086
-    exec "${ERL_DIR}erl" +B \
+    exec erl +B \
         $pa_arg \
         -boot "$CLEAN_BOOT_FILE" \
         -noinput -noshell -hidden -smp enable \
