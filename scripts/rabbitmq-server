@@ -82,9 +82,6 @@ start_rabbitmq_server() {
     set -f
 
     export ERL_MAX_ETS_TABLES \
-        RABBITMQ_CONFIG_FILE \
-        RABBITMQ_NAME_TYPE \
-        RABBITMQ_NODENAME \
         SYS_PREFIX
 
     check_start_params
@@ -99,7 +96,6 @@ start_rabbitmq_server() {
         ${RABBITMQ_START_RABBIT} \
         -boot "${SASL_BOOT_FILE}" \
         ${RABBITMQ_CONFIG_ARG} \
-        ${RABBITMQ_GENERATED_CONFIG_ARG} \
         +W w \
         +A ${RABBITMQ_IO_THREAD_POOL_SIZE} \
         ${RABBITMQ_DEFAULT_ALLOC_ARGS} \

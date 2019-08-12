@@ -104,7 +104,10 @@ saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
 
 ## Get configuration variables from the configure environment file
 [ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE=${CONF_ENV_FILE}
-[ -f ${RABBITMQ_CONF_ENV_FILE} ] && . ${RABBITMQ_CONF_ENV_FILE} || true
+if [ -f "${RABBITMQ_CONF_ENV_FILE}" ]; then
+	CONF_ENV_FILE_PHASE=rabbitmq-env
+	. ${RABBITMQ_CONF_ENV_FILE} || true
+fi
 
 [ -n "$ERL_EPMD_PORT" ] && export ERL_EPMD_PORT
 [ -n "$ERL_EPMD_ADDRESS" ] && export ERL_EPMD_ADDRESS
@@ -127,17 +130,6 @@ DEFAULT_MAX_NUMBER_OF_ATOMS=5000000
 
 ## Common server defaults
 SERVER_ERL_ARGS=" +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES +t $RABBITMQ_MAX_NUMBER_OF_ATOMS +stbt $RABBITMQ_SCHEDULER_BIND_TYPE +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE "
-
-[ "x" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_USE_LONGNAME=${USE_LONGNAME}
-if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] ; then
-    RABBITMQ_NAME_TYPE=-name
-    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -f`
-    [ "x" = "x$NODENAME" ] && NODENAME=rabbit@${HOSTNAME}
-else
-    RABBITMQ_NAME_TYPE=-sname
-    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
-    [ "x" = "x$NODENAME" ] && NODENAME=rabbit@${HOSTNAME%%.*}
-fi
 
 ##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
